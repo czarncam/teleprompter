@@ -18,25 +18,40 @@ body {
   left: 0;
   width: 100%;
   background: #111;
-  padding: 10px;
+  padding: 8px 10px;
   display: flex;
-  gap: 15px;
+  flex-wrap: wrap; /* Permite que los controles se acomoden si la pantalla es estrecha */
+  gap: 8px 12px;
   align-items: center;
   justify-content: center;
   z-index: 10;
   border-bottom: 1px solid #333;
 }
 
-#controls button, #controls input {
-  padding: 8px 12px;
-  font-size: 14px;
+#controls button, #controls label {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+#controls button {
+  padding: 6px 10px;
+  background: #222;
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 4px;
   cursor: pointer;
 }
 
+#controls input[type="range"] {
+  width: 90px;
+}
+
 #editor-container {
-  height: calc(100vh - 60px);
-  margin-top: 60px;
-  padding: 20px;
+  height: calc(100vh - 90px);
+  margin-top: 90px;
+  padding: 15px;
 }
 
 textarea {
@@ -44,45 +59,61 @@ textarea {
   height: 100%;
   background: #111;
   color: #fff;
-  font-size: 18px;
-  padding: 15px;
+  font-size: 16px;
+  padding: 12px;
   border: 1px solid #333;
+  border-radius: 6px;
   resize: none;
 }
 
 #prompter-display {
+  display: none;
   position: relative;
+  height: calc(100vh - 90px);
+  margin-top: 90px;
+  overflow-y: scroll;
+  padding: 0 5%; /* Menos margen lateral en móvil */
+  scroll-behavior: smooth;
+}
+
+#prompter-display::-webkit-scrollbar {
+  display: none;
 }
 
 #cameraPreview {
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
   object-fit: cover;
-  opacity: 0.3; /* Ajusta la transparencia del video tras el texto */
+  opacity: 0.35;
   z-index: 0;
 }
 
 #prompter-text {
   position: relative;
   z-index: 1;
-}
-
-#prompter-text {
   line-height: 1.5;
   white-space: pre-wrap;
   padding-bottom: 80vh;
-  text-align: center; /* Centra el texto en la pantalla */
-}
-
-#prompter-text {
-  line-height: 1.5;
-  white-space: pre-wrap;
-  padding-bottom: 80vh;
+  text-align: center;
 }
 
 .mirror {
   transform: scaleX(-1);
+}
+
+/* Ajustes especiales para tablets y PCs */
+@media (min-width: 768px) {
+  #controls input[type="range"] {
+    width: 130px;
+  }
+  #editor-container, #prompter-display {
+    height: calc(100vh - 60px);
+    margin-top: 60px;
+  }
+  #prompter-display {
+    padding: 0 15%;
+  }
 }
