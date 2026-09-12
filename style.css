@@ -20,8 +20,8 @@ body {
   background: #111;
   padding: 8px 10px;
   display: flex;
-  flex-wrap: wrap; /* Permite que los controles se acomoden si la pantalla es estrecha */
-  gap: 8px 12px;
+  flex-wrap: wrap;
+  gap: 8px 10px;
   align-items: center;
   justify-content: center;
   z-index: 10;
@@ -32,7 +32,7 @@ body {
   font-size: 13px;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 #controls button {
@@ -44,8 +44,13 @@ body {
   cursor: pointer;
 }
 
+#controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 #controls input[type="range"] {
-  width: 90px;
+  width: 80px;
 }
 
 #editor-container {
@@ -72,7 +77,7 @@ textarea {
   height: calc(100vh - 90px);
   margin-top: 90px;
   overflow-y: scroll;
-  padding: 0 5%; /* Menos margen lateral en móvil */
+  padding: 0 5%;
   scroll-behavior: smooth;
 }
 
@@ -96,6 +101,7 @@ textarea {
   z-index: 1;
   line-height: 1.5;
   white-space: pre-wrap;
+  padding-top: 40vh; /* Permite ver los primeros renglones en el centro antes de iniciar */
   padding-bottom: 80vh;
   text-align: center;
 }
@@ -104,10 +110,9 @@ textarea {
   transform: scaleX(-1);
 }
 
-/* Ajustes especiales para tablets y PCs */
 @media (min-width: 768px) {
   #controls input[type="range"] {
-    width: 130px;
+    width: 120px;
   }
   #editor-container, #prompter-display {
     height: calc(100vh - 60px);
