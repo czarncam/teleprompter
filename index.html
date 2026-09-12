@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi Teleprompter Personal</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="controls">
+    <button id="btnPlay">▶ Iniciar / Pausa</button>
+    <label>Velocidad: <input type="range" id="speed" min="1" max="10" value="3"></label>
+    <label>Tamaño de letra: <input type="range" id="fontSize" min="20" max="100" value="48"></label>
+    <button id="btnMirror">↔ Modo Espejo</button>
+    <button id="btnReset">↺ Reiniciar</button>
+  </div>
+
+  <div id="editor-container">
+    <textarea id="textInput" placeholder="Pega tu texto aquí sin límite de caracteres..."></textarea>
+  </div>
+
+  <div id="prompter-display">
+  <video id="cameraPreview" autoplay playsinline muted></video>
+  <div id="prompter-text"></div>
+</div>
+
+  <script src="script.js"></script>
+</body>
+</html>
