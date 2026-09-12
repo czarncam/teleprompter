@@ -3,28 +3,62 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mi Teleprompter Personal</title>
-  <link rel="stylesheet" href="style.css?v=3">
+  <title>Mi Teleprompter Pro</title>
+  <link rel="stylesheet" href="style.css?v=4">
 </head>
 <body>
-  <div id="controls">
-    <button id="btnPlay">▶ Iniciar / Pausa</button>
-    <button id="btnRecord" disabled>🔴 Grabar</button>
-    <label>Velocidad: <input type="range" id="speed" min="1" max="10" value="3"></label>
-    <label>Tamaño: <input type="range" id="fontSize" min="20" max="80" value="36"></label>
-    <button id="btnMirror">↔ Espejo</button>
-    <button id="btnReset">↺ Editar / Reiniciar</button>
-  </div>
+  <!-- BARRA DE NAVEGACIÓN Y MENÚ -->
+  <header id="main-header">
+    <nav>
+      <button id="navEditor" class="active-nav">📝 Editor</button>
+      <button id="navPrompter">🎥 Teleprompter</button>
+      <button id="navGallery">📁 Galería (<span id="videoCount">0</span>)</button>
+    </nav>
+  </header>
 
-  <div id="editor-container">
+  <!-- SECCIÓN 1: EDITOR -->
+  <main id="section-editor" class="app-section">
     <textarea id="textInput" placeholder="Pega tu texto aquí sin límite de caracteres..."></textarea>
-  </div>
+    <div class="editor-actions">
+      <button id="btnGoToPrompter" class="btn-primary">Ir al Teleprompter ▶</button>
+    </div>
+  </main>
 
-  <div id="prompter-display">
-    <video id="cameraPreview" autoplay playsinline muted></video>
-    <div id="prompter-text"></div>
-  </div>
+  <!-- SECCIÓN 2: TELEPROMPTER -->
+  <main id="section-prompter" class="app-section" style="display: none;">
+    <div id="controls">
+      <button id="btnPlay">▶ Iniciar Lectura</button>
+      
+      <!-- Controles de Grabación -->
+      <div class="rec-group">
+        <button id="btnRecord">🔴 Grabar</button>
+        <button id="btnPauseRec" style="display: none;">⏸ Pausar Rec</button>
+        <button id="btnStopRec" style="display: none;">⏹ Finalizar Rec</button>
+      </div>
 
-  <script src="script.js?v=3"></script>
+      <label>Velocidad: 
+        <input type="range" id="speed" min="0.2" max="5" step="0.1" value="1">
+      </label>
+      <label>Tamaño: 
+        <input type="range" id="fontSize" min="20" max="80" value="36">
+      </label>
+      <button id="btnMirror">↔ Espejo</button>
+    </div>
+
+    <div id="prompter-display">
+      <video id="cameraPreview" autoplay playsinline muted></video>
+      <div id="prompter-text"></div>
+    </div>
+  </main>
+
+  <!-- SECCIÓN 3: GALERÍA -->
+  <main id="section-gallery" class="app-section" style="display: none;">
+    <h2>Mis Grabaciones</h2>
+    <div id="galleryGrid" class="gallery-grid">
+      <p id="emptyGalleryMsg">No hay videos grabados aún.</p>
+    </div>
+  </main>
+
+  <script src="script.js?v=4"></script>
 </body>
 </html>
