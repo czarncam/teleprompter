@@ -35,9 +35,10 @@ let mediaRecorder = null;
 let recordedChunks = [];
 let dbVideos = [];
 let selectedMimeType = '';
-let currentFacingMode = 'user'; // 'user' (frontal) o 'environment' (trasera)
+let currentFacingMode = 'user';
+let isRecording = false;
 
-// INICIALIZACIÓN DE SECCIONES
+// INICIALIZACIÓN
 navEditor.addEventListener('click', () => switchSection('editor'));
 navPrompter.addEventListener('click', () => switchSection('prompter'));
 navGallery.addEventListener('click', () => switchSection('gallery'));
@@ -66,7 +67,7 @@ function switchSection(target) {
   }
 }
 
-// GESTIÓN DE CÁMARA (CAMBIO FRONTAL / TRASERA)
+// CÁMARA Y CAMBIO DE FRONTAL/TRASERA SIN CORTAR GRABACIÓN
 async function startCamera() {
   stopCamera();
   try {
@@ -78,7 +79,6 @@ async function startCamera() {
       },
       audio: true
     }).catch(async () => {
-      // Fallback si la cámara exacta no está disponible
       return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     });
 
@@ -95,7 +95,7 @@ async function startCamera() {
 }
 
 function stopCamera() {
-  if (mediaStream) {
+  if (mediaStream && !isRecording) {
     mediaStream.getTracks().forEach(track => track.stop());
     mediaStream = null;
     if (video) video.srcObject = null;
@@ -104,7 +104,25 @@ function stopCamera() {
 
 btnSwitchCam.addEventListener('click', async () => {
   currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-  await startCamera();
+  
+  if (isRecording && mediaRecorder && mediaStream) {
+    // Si está grabando, cambia la pista de video sobre la marcha sin detener la grabación
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { exact: currentFacingMode } },
+      audio: true
+    });
+    
+    const newVideoTrack = newStream.getVideoTracks()[0];
+    const oldVideoTrack = mediaStream.getVideoTracks()[0];
+    
+    mediaStream.removeTrack(oldVideoTrack);
+    oldVideoTrack.stop();
+    mediaStream.addTrack(newVideoTrack);
+    
+    if (video) video.srcObject = mediaStream;
+  } else {
+    await startCamera();
+  }
 });
 
 // DESPLAZAMIENTO DEL TEXTO
@@ -155,7 +173,7 @@ function resetScroll() {
   prompterDisplay.scrollTop = 0;
 }
 
-// FORMATOS DE VIDEO
+// FORMATOS
 function getSupportedMimeType() {
   const types = [
     'video/mp4;codecs=h264,aac',
@@ -170,7 +188,7 @@ function getSupportedMimeType() {
   return '';
 }
 
-// GRABACIÓN
+// GRABACIÓN CONTINUA
 btnRecord.addEventListener('click', startRecording);
 btnPauseRec.addEventListener('click', pauseRecording);
 btnStopRec.addEventListener('click', stopRecording);
@@ -178,6 +196,7 @@ btnStopRec.addEventListener('click', stopRecording);
 function startRecording() {
   if (!mediaStream) return;
   recordedChunks = [];
+  isRecording = true;
   
   selectedMimeType = getSupportedMimeType();
   const options = selectedMimeType ? { mimeType: selectedMimeType } : {};
@@ -213,6 +232,7 @@ function pauseRecording() {
 
 function stopRecording() {
   if (!mediaRecorder) return;
+  isRecording = false;
   mediaRecorder.stop();
   btnRecord.style.display = 'inline-block';
   btnPauseRec.style.display = 'none';
@@ -220,7 +240,7 @@ function stopRecording() {
   btnPauseRec.textContent = '⏸ Pausar Rec';
 }
 
-// GALERÍA EN MINIATURAS CON SCROLL VERTICAL
+// GALERÍA
 function saveToGallery() {
   const actualType = mediaRecorder.mimeType || selectedMimeType || 'video/mp4';
   const isMp4 = actualType.includes('mp4');
@@ -280,7 +300,7 @@ window.deleteVideo = function(id) {
   renderGallery();
 };
 
-// Control Teclado
+// Teclado
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space' && document.activeElement !== textInput && secPrompter.style.display !== 'none') {
     e.preventDefault();
