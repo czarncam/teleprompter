@@ -9,6 +9,7 @@ const btnGoToPrompter = document.getElementById('btnGoToPrompter');
 
 // Teleprompter
 const btnPlay = document.getElementById('btnPlay');
+const btnReset = document.getElementById('btnReset');
 const btnRecord = document.getElementById('btnRecord');
 const btnPauseRec = document.getElementById('btnPauseRec');
 const btnStopRec = document.getElementById('btnStopRec');
@@ -60,7 +61,7 @@ function switchSection(target) {
   }
 }
 
-// CÁMARA
+// CÁMARA (Compatible con iOS Safari)
 async function startCamera() {
   if (mediaStream) return;
   try {
@@ -68,7 +69,14 @@ async function startCamera() {
       video: { facingMode: 'user' },
       audio: true
     });
-    video.srcObject = mediaStream;
+    if (video) {
+      video.srcObject = mediaStream;
+      // Forzado de reproducción para iOS Safari
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+      video.muted = true;
+      await video.play();
+    }
   } catch (err) {
     console.error('Error al acceder a la cámara/micrófono: ', err);
   }
@@ -82,8 +90,9 @@ function stopCamera() {
   }
 }
 
-// DESPLAZAMIENTO DEL TELEPROMPTER
+// DESPLAZAMIENTO DEL TELEPROMPTER (Compatibilidad iOS)
 btnPlay.addEventListener('click', togglePlay);
+btnReset.addEventListener('click', resetScroll);
 btnMirror.addEventListener('click', () => prompterText.classList.toggle('mirror'));
 fontSizeInput.addEventListener('input', (e) => {
   prompterText.style.fontSize = `${e.target.value}px`;
@@ -93,6 +102,9 @@ function togglePlay() {
   if (!isPlaying) {
     isPlaying = true;
     btnPlay.textContent = '⏸ Pausa';
+    
+    // Forzar foco táctil/scroll en iOS
+    prompterDisplay.style.webkitOverflowScrolling = 'touch';
     
     scrollInterval = setInterval(() => {
       scrollAccumulator += parseFloat(speedInput.value);
@@ -108,7 +120,14 @@ function togglePlay() {
   }
 }
 
-// GRABACIÓN FLEXIBLE (Iniciar / Pausar / Continuar / Detener)
+function resetScroll() {
+  isPlaying = false;
+  clearInterval(scrollInterval);
+  btnPlay.textContent = '▶ Iniciar Lectura';
+  prompterDisplay.scrollTop = 0;
+}
+
+// GRABACIÓN FLEXIBLE
 btnRecord.addEventListener('click', startRecording);
 btnPauseRec.addEventListener('click', pauseRecording);
 btnStopRec.addEventListener('click', stopRecording);
@@ -117,10 +136,19 @@ function startRecording() {
   if (!mediaStream) return;
   recordedChunks = [];
   
+  let options = { mimeType: 'video/webm' };
+  if (!MediaRecorder.isTypeSupported('video/webm')) {
+    if (MediaRecorder.isTypeSupported('video/mp4')) {
+      options = { mimeType: 'video/mp4' };
+    } else {
+      options = {};
+    }
+  }
+
   try {
-    mediaRecorder = new MediaRecorder(mediaStream);
+    mediaRecorder = new MediaRecorder(mediaStream, options);
   } catch (e) {
-    mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/mp4' });
+    mediaRecorder = new MediaRecorder(mediaStream);
   }
 
   mediaRecorder.ondataavailable = (e) => {
@@ -157,12 +185,14 @@ function stopRecording() {
 
 // GALERÍA LOCAL
 function saveToGallery() {
-  const blob = new Blob(recordedChunks, { type: 'video/webm' });
+  const mime = recordedChunks[0]?.type || 'video/mp4';
+  const blob = new Blob(recordedChunks, { type: mime });
   const videoUrl = URL.createObjectURL(blob);
   const videoItem = {
     id: Date.now(),
     url: videoUrl,
-    date: new Date().toLocaleString()
+    date: new Date().toLocaleString(),
+    ext: mime.includes('mp4') ? 'mp4' : 'webm'
   };
   
   dbVideos.unshift(videoItem);
@@ -180,10 +210,10 @@ function renderGallery() {
     const card = document.createElement('div');
     card.className = 'video-card';
     card.innerHTML = `
-      <video src="${item.url}" controls></video>
+      <video src="${item.url}" controls playsinline></video>
       <small>${item.date}</small>
       <div class="card-actions">
-        <a href="${item.url}" download="grabacion_${item.id}.webm">
+        <a href="${item.url}" download="grabacion_${item.id}.${item.ext}">
           <button class="btn-download">💾 Descargar</button>
         </a>
         <button class="btn-delete" onclick="deleteVideo(${item.id})">🗑 Eliminar</button>
