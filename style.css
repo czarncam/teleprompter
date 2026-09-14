@@ -136,8 +136,9 @@ textarea {
   position: relative;
   height: 100%;
   overflow-y: scroll;
+  -webkit-overflow-scrolling: touch; /* Permite scroll fluido en iOS */
+  transform: translateZ(0); /* Aceleración por GPU en iOS */
   padding: 0 5%;
-  scroll-behavior: smooth;
 }
 
 #prompter-display::-webkit-scrollbar {

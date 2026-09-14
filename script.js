@@ -27,14 +27,15 @@ const emptyGalleryMsg = document.getElementById('emptyGalleryMsg');
 const videoCount = document.getElementById('videoCount');
 
 let isPlaying = false;
-let scrollInterval = null;
-let scrollAccumulator = 0;
+let animationFrameId = null;
+let lastTimeStamp = 0;
 let mediaStream = null;
 let mediaRecorder = null;
 let recordedChunks = [];
 let dbVideos = [];
+let selectedMimeType = '';
 
-// INICIALIZACIÓN
+// INICIALIZACIÓN DE SECCIONES
 navEditor.addEventListener('click', () => switchSection('editor'));
 navPrompter.addEventListener('click', () => switchSection('prompter'));
 navGallery.addEventListener('click', () => switchSection('gallery'));
@@ -48,6 +49,7 @@ function switchSection(target) {
     secEditor.style.display = 'flex';
     navEditor.classList.add('active-nav');
     stopCamera();
+    stopScroll();
   } else if (target === 'prompter') {
     secPrompter.style.display = 'block';
     navPrompter.classList.add('active-nav');
@@ -57,23 +59,23 @@ function switchSection(target) {
     secGallery.style.display = 'block';
     navGallery.classList.add('active-nav');
     stopCamera();
+    stopScroll();
     renderGallery();
   }
 }
 
-// CÁMARA (Compatible con iOS Safari)
+// CÁMARA (Compatible iOS / Android)
 async function startCamera() {
   if (mediaStream) return;
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user' },
+      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: true
     });
     if (video) {
       video.srcObject = mediaStream;
-      // Forzado de reproducción para iOS Safari
-      video.setAttribute('playsinline', '');
-      video.setAttribute('webkit-playsinline', '');
+      video.setAttribute('playsinline', 'true');
+      video.setAttribute('webkit-playsinline', 'true');
       video.muted = true;
       await video.play();
     }
@@ -90,7 +92,7 @@ function stopCamera() {
   }
 }
 
-// DESPLAZAMIENTO DEL TELEPROMPTER (Compatibilidad iOS)
+// DESPLAZAMIENTO SUAVE (Fix definitivo para iOS)
 btnPlay.addEventListener('click', togglePlay);
 btnReset.addEventListener('click', resetScroll);
 btnMirror.addEventListener('click', () => prompterText.classList.toggle('mirror'));
@@ -98,36 +100,64 @@ fontSizeInput.addEventListener('input', (e) => {
   prompterText.style.fontSize = `${e.target.value}px`;
 });
 
+function step(timestamp) {
+  if (!lastTimeStamp) lastTimeStamp = timestamp;
+  const progress = timestamp - lastTimeStamp;
+
+  if (progress > 20) {
+    const speed = parseFloat(speedInput.value);
+    prompterDisplay.scrollTop += speed * (progress / 16.6);
+    lastTimeStamp = timestamp;
+  }
+
+  if (isPlaying) {
+    animationFrameId = requestAnimationFrame(step);
+  }
+}
+
 function togglePlay() {
   if (!isPlaying) {
     isPlaying = true;
     btnPlay.textContent = '⏸ Pausa';
-    
-    // Forzar foco táctil/scroll en iOS
-    prompterDisplay.style.webkitOverflowScrolling = 'touch';
-    
-    scrollInterval = setInterval(() => {
-      scrollAccumulator += parseFloat(speedInput.value);
-      if (scrollAccumulator >= 1) {
-        prompterDisplay.scrollTop += Math.floor(scrollAccumulator);
-        scrollAccumulator %= 1;
-      }
-    }, 30);
+    lastTimeStamp = 0;
+    animationFrameId = requestAnimationFrame(step);
   } else {
-    isPlaying = false;
-    btnPlay.textContent = '▶ Continuar';
-    clearInterval(scrollInterval);
+    stopScroll();
+  }
+}
+
+function stopScroll() {
+  isPlaying = false;
+  btnPlay.textContent = '▶ Iniciar Lectura';
+  if (animationFrameId) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
   }
 }
 
 function resetScroll() {
-  isPlaying = false;
-  clearInterval(scrollInterval);
-  btnPlay.textContent = '▶ Iniciar Lectura';
+  stopScroll();
   prompterDisplay.scrollTop = 0;
 }
 
-// GRABACIÓN FLEXIBLE
+// DETECTOR DE FORMATOS DE VIDEO COMPATIBLES
+function getSupportedMimeType() {
+  const types = [
+    'video/mp4;codecs=h264,aac',
+    'video/mp4',
+    'video/webm;codecs=h264',
+    'video/webm;codecs=vp9,opus',
+    'video/webm'
+  ];
+  for (let type of types) {
+    if (MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+  return '';
+}
+
+// GRABACIÓN DE VIDEO
 btnRecord.addEventListener('click', startRecording);
 btnPauseRec.addEventListener('click', pauseRecording);
 btnStopRec.addEventListener('click', stopRecording);
@@ -136,14 +166,8 @@ function startRecording() {
   if (!mediaStream) return;
   recordedChunks = [];
   
-  let options = { mimeType: 'video/webm' };
-  if (!MediaRecorder.isTypeSupported('video/webm')) {
-    if (MediaRecorder.isTypeSupported('video/mp4')) {
-      options = { mimeType: 'video/mp4' };
-    } else {
-      options = {};
-    }
-  }
+  selectedMimeType = getSupportedMimeType();
+  const options = selectedMimeType ? { mimeType: selectedMimeType } : {};
 
   try {
     mediaRecorder = new MediaRecorder(mediaStream, options);
@@ -152,11 +176,11 @@ function startRecording() {
   }
 
   mediaRecorder.ondataavailable = (e) => {
-    if (e.data.size > 0) recordedChunks.push(e.data);
+    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
   };
 
   mediaRecorder.onstop = saveToGallery;
-  mediaRecorder.start();
+  mediaRecorder.start(1000); // Guarda fragmentos cada segundo para mayor estabilidad
 
   btnRecord.style.display = 'none';
   btnPauseRec.style.display = 'inline-block';
@@ -183,16 +207,22 @@ function stopRecording() {
   btnPauseRec.textContent = '⏸ Pausar Rec';
 }
 
-// GALERÍA LOCAL
+// GUARDAR Y DESCARGAR VIDEO (.MP4 / .WEBM)
 function saveToGallery() {
-  const mime = recordedChunks[0]?.type || 'video/mp4';
-  const blob = new Blob(recordedChunks, { type: mime });
+  const actualType = mediaRecorder.mimeType || selectedMimeType || 'video/mp4';
+  const isMp4 = actualType.includes('mp4');
+  const extension = isMp4 ? 'mp4' : 'webm';
+  
+  const blob = new Blob(recordedChunks, { type: actualType });
   const videoUrl = URL.createObjectURL(blob);
+  
   const videoItem = {
     id: Date.now(),
     url: videoUrl,
+    blob: blob,
     date: new Date().toLocaleString(),
-    ext: mime.includes('mp4') ? 'mp4' : 'webm'
+    ext: extension,
+    mime: actualType
   };
   
   dbVideos.unshift(videoItem);
@@ -210,12 +240,10 @@ function renderGallery() {
     const card = document.createElement('div');
     card.className = 'video-card';
     card.innerHTML = `
-      <video src="${item.url}" controls playsinline></video>
-      <small>${item.date}</small>
+      <video src="${item.url}" controls playsinline webkit-playsinline preload="metadata"></video>
+      <small>${item.date} (${item.ext.toUpperCase()})</small>
       <div class="card-actions">
-        <a href="${item.url}" download="grabacion_${item.id}.${item.ext}">
-          <button class="btn-download">💾 Descargar</button>
-        </a>
+        <button class="btn-download" onclick="downloadVideo(${item.id})">💾 Descargar .${item.ext}</button>
         <button class="btn-delete" onclick="deleteVideo(${item.id})">🗑 Eliminar</button>
       </div>
     `;
@@ -223,13 +251,25 @@ function renderGallery() {
   });
 }
 
+window.downloadVideo = function(id) {
+  const item = dbVideos.find(v => v.id === id);
+  if (!item) return;
+
+  const a = document.createElement('a');
+  a.href = item.url;
+  a.download = `teleprompter_${item.id}.${item.ext}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+};
+
 window.deleteVideo = function(id) {
   dbVideos = dbVideos.filter(item => item.id !== id);
   videoCount.textContent = dbVideos.length;
   renderGallery();
 };
 
-// Teclado
+// Control de Teclado
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space' && document.activeElement !== textInput && secPrompter.style.display !== 'none') {
     e.preventDefault();
@@ -237,7 +277,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// PWA
+// PWA Service Worker
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js');
 }
