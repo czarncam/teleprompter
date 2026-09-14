@@ -13,6 +13,7 @@ const btnReset = document.getElementById('btnReset');
 const btnRecord = document.getElementById('btnRecord');
 const btnPauseRec = document.getElementById('btnPauseRec');
 const btnStopRec = document.getElementById('btnStopRec');
+const btnSwitchCam = document.getElementById('btnSwitchCam');
 const btnMirror = document.getElementById('btnMirror');
 const speedInput = document.getElementById('speed');
 const fontSizeInput = document.getElementById('fontSize');
@@ -34,6 +35,7 @@ let mediaRecorder = null;
 let recordedChunks = [];
 let dbVideos = [];
 let selectedMimeType = '';
+let currentFacingMode = 'user'; // 'user' (frontal) o 'environment' (trasera)
 
 // INICIALIZACIÓN DE SECCIONES
 navEditor.addEventListener('click', () => switchSection('editor'));
@@ -64,15 +66,23 @@ function switchSection(target) {
   }
 }
 
-// CÁMARA (Compatible iOS / Android)
+// GESTIÓN DE CÁMARA (CAMBIO FRONTAL / TRASERA)
 async function startCamera() {
-  if (mediaStream) return;
+  stopCamera();
   try {
     mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { 
+        facingMode: { exact: currentFacingMode },
+        width: { ideal: 1280 }, 
+        height: { ideal: 720 } 
+      },
       audio: true
+    }).catch(async () => {
+      // Fallback si la cámara exacta no está disponible
+      return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     });
-    if (video) {
+
+    if (video && mediaStream) {
       video.srcObject = mediaStream;
       video.setAttribute('playsinline', 'true');
       video.setAttribute('webkit-playsinline', 'true');
@@ -80,7 +90,7 @@ async function startCamera() {
       await video.play();
     }
   } catch (err) {
-    console.error('Error al acceder a la cámara/micrófono: ', err);
+    console.error('Error al acceder a la cámara: ', err);
   }
 }
 
@@ -88,11 +98,16 @@ function stopCamera() {
   if (mediaStream) {
     mediaStream.getTracks().forEach(track => track.stop());
     mediaStream = null;
-    video.srcObject = null;
+    if (video) video.srcObject = null;
   }
 }
 
-// DESPLAZAMIENTO SUAVE (Fix definitivo para iOS)
+btnSwitchCam.addEventListener('click', async () => {
+  currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+  await startCamera();
+});
+
+// DESPLAZAMIENTO DEL TEXTO
 btnPlay.addEventListener('click', togglePlay);
 btnReset.addEventListener('click', resetScroll);
 btnMirror.addEventListener('click', () => prompterText.classList.toggle('mirror'));
@@ -140,7 +155,7 @@ function resetScroll() {
   prompterDisplay.scrollTop = 0;
 }
 
-// DETECTOR DE FORMATOS DE VIDEO COMPATIBLES
+// FORMATOS DE VIDEO
 function getSupportedMimeType() {
   const types = [
     'video/mp4;codecs=h264,aac',
@@ -150,14 +165,12 @@ function getSupportedMimeType() {
     'video/webm'
   ];
   for (let type of types) {
-    if (MediaRecorder.isTypeSupported(type)) {
-      return type;
-    }
+    if (MediaRecorder.isTypeSupported(type)) return type;
   }
   return '';
 }
 
-// GRABACIÓN DE VIDEO
+// GRABACIÓN
 btnRecord.addEventListener('click', startRecording);
 btnPauseRec.addEventListener('click', pauseRecording);
 btnStopRec.addEventListener('click', stopRecording);
@@ -180,7 +193,7 @@ function startRecording() {
   };
 
   mediaRecorder.onstop = saveToGallery;
-  mediaRecorder.start(1000); // Guarda fragmentos cada segundo para mayor estabilidad
+  mediaRecorder.start(1000);
 
   btnRecord.style.display = 'none';
   btnPauseRec.style.display = 'inline-block';
@@ -207,7 +220,7 @@ function stopRecording() {
   btnPauseRec.textContent = '⏸ Pausar Rec';
 }
 
-// GUARDAR Y DESCARGAR VIDEO (.MP4 / .WEBM)
+// GALERÍA EN MINIATURAS CON SCROLL VERTICAL
 function saveToGallery() {
   const actualType = mediaRecorder.mimeType || selectedMimeType || 'video/mp4';
   const isMp4 = actualType.includes('mp4');
@@ -219,10 +232,8 @@ function saveToGallery() {
   const videoItem = {
     id: Date.now(),
     url: videoUrl,
-    blob: blob,
-    date: new Date().toLocaleString(),
-    ext: extension,
-    mime: actualType
+    date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    ext: extension
   };
   
   dbVideos.unshift(videoItem);
@@ -243,8 +254,8 @@ function renderGallery() {
       <video src="${item.url}" controls playsinline webkit-playsinline preload="metadata"></video>
       <small>${item.date} (${item.ext.toUpperCase()})</small>
       <div class="card-actions">
-        <button class="btn-download" onclick="downloadVideo(${item.id})">💾 Descargar .${item.ext}</button>
-        <button class="btn-delete" onclick="deleteVideo(${item.id})">🗑 Eliminar</button>
+        <button class="btn-download" onclick="downloadVideo(${item.id})">💾 Guardar</button>
+        <button class="btn-delete" onclick="deleteVideo(${item.id})">🗑 Borrar</button>
       </div>
     `;
     galleryGrid.appendChild(card);
@@ -269,7 +280,7 @@ window.deleteVideo = function(id) {
   renderGallery();
 };
 
-// Control de Teclado
+// Control Teclado
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space' && document.activeElement !== textInput && secPrompter.style.display !== 'none') {
     e.preventDefault();
@@ -277,7 +288,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// PWA Service Worker
+// Service Worker
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js');
 }
