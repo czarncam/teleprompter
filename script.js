@@ -10,13 +10,19 @@ let isWideAngle = false;
 let db = null;
 
 // Elementos del DOM
+const navHome = document.getElementById('navHome');
 const navEditor = document.getElementById('navEditor');
 const navPrompter = document.getElementById('navPrompter');
 const navGallery = document.getElementById('navGallery');
 
+const sectionHome = document.getElementById('section-home');
 const sectionEditor = document.getElementById('section-editor');
 const sectionPrompter = document.getElementById('section-prompter');
 const sectionGallery = document.getElementById('section-gallery');
+
+const btnHomeEditor = document.getElementById('btnHomeEditor');
+const btnHomePrompter = document.getElementById('btnHomePrompter');
+const btnHomeGallery = document.getElementById('btnHomeGallery');
 
 const textInput = document.getElementById('textInput');
 const btnGoToPrompter = document.getElementById('btnGoToPrompter');
@@ -79,7 +85,6 @@ function loadVideosFromDB() {
   const request = store.getAll();
 
   request.onsuccess = (e) => {
-    // Liberar URLs de Blob anteriores para evitar fugas de memoria
     recordedVideos.forEach(item => {
       if (item.url) URL.revokeObjectURL(item.url);
     });
@@ -107,9 +112,9 @@ function deleteVideoFromDB(id) {
   };
 }
 
-// 1. NAVEGACIÓN
+// 1. NAVEGACIÓN ENTRE SECCIONES
 function showSection(sectionToShow, activeBtn) {
-  [sectionEditor, sectionPrompter, sectionGallery].forEach(sec => {
+  [sectionHome, sectionEditor, sectionPrompter, sectionGallery].forEach(sec => {
     if (sec) sec.style.display = 'none';
   });
   [navEditor, navPrompter, navGallery].forEach(btn => {
@@ -131,16 +136,26 @@ function showSection(sectionToShow, activeBtn) {
   }
 }
 
+// Eventos de Navegación de la Barra Superior
+if (navHome) navHome.addEventListener('click', () => showSection(sectionHome, null));
 navEditor.addEventListener('click', () => showSection(sectionEditor, navEditor));
 navPrompter.addEventListener('click', () => showSection(sectionPrompter, navPrompter));
 navGallery.addEventListener('click', () => showSection(sectionGallery, navGallery));
+
+// Eventos de Navegación desde los Botones de la Home
+if (btnHomeEditor) btnHomeEditor.addEventListener('click', () => showSection(sectionEditor, navEditor));
+if (btnHomePrompter) btnHomePrompter.addEventListener('click', () => {
+  prompterText.textContent = textInput.value || 'Escribe tu guion en el editor...';
+  showSection(sectionPrompter, navPrompter);
+});
+if (btnHomeGallery) btnHomeGallery.addEventListener('click', () => showSection(sectionGallery, navGallery));
 
 btnGoToPrompter.addEventListener('click', () => {
   prompterText.textContent = textInput.value || 'Escribe tu guion en el editor...';
   showSection(sectionPrompter, navPrompter);
 });
 
-// 2. CONTROL DE CÁMARA OPTIMIZADO
+// 2. CONTROL DE CÁMARA Y ZOOM
 async function startCamera() {
   stopCamera();
   
@@ -237,7 +252,7 @@ btnMirror.addEventListener('click', () => {
   prompterText.classList.toggle('mirror');
 });
 
-// 4. GRABACIÓN DE VIDEO CON PERSISTENCIA
+// 4. GRABACIÓN DE VIDEO CON PERSISTENCIA LOCAL
 function getSupportedMimeType() {
   const types = [
     'video/mp4;codecs=avc1',
@@ -286,7 +301,6 @@ btnRecord.addEventListener('click', () => {
     const now = new Date();
     const dateStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + now.toLocaleDateString();
     
-    // Guardar en la base de datos interna de forma permanente
     saveVideoToDB(blob, dateStr);
   };
 
@@ -305,7 +319,7 @@ btnStopRec.addEventListener('click', () => {
   stopPrompter();
 });
 
-// 5. GALERÍA Y MODAL
+// 5. GALERÍA Y MODAL DE REPRODUCCIÓN
 function renderGallery() {
   const galleryGrid = document.getElementById('galleryGrid');
   const videoCount = document.getElementById('videoCount');
@@ -385,9 +399,9 @@ window.deleteVideo = function(id) {
   deleteVideoFromDB(id);
 };
 
-// INICIALIZACIÓN GENERAL
+// INICIALIZACIÓN
 document.addEventListener('DOMContentLoaded', () => {
-  initDB(); // Inicializar base de datos
+  initDB();
 
   if (btnCloseModal) {
     btnCloseModal.addEventListener('click', window.closeModal);

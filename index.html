@@ -3,15 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Teleprompter Pro</title>
-  <link rel="stylesheet" href="style.css?v=9">
+  <title>MY TelePROMPTER</title>
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
 
   <!-- BARRA DE NAVEGACIÓN SUPERIOR -->
   <header id="main-header">
+    <div class="brand-logo" id="navHome">
+      MY <span class="brand-pro">PRO</span>MPTER
+    </div>
     <nav>
-      <button id="navEditor" class="nav-btn active-nav">
+      <button id="navEditor" class="nav-btn">
         <span class="nav-icon">📝</span>
         <span>Editor</span>
       </button>
@@ -26,8 +29,42 @@
     </nav>
   </header>
 
+  <!-- SECCIÓN 0: HOME / INICIO -->
+  <main id="section-home" class="app-section">
+    <div class="home-container">
+      <div class="hero-content">
+        <h1 class="main-title">MY <span class="title-pro">PRO</span>MPTER</h1>
+        <p class="subtitle">Estudio de grabación y lectura profesional para creadores de contenido.</p>
+      </div>
+
+      <div class="home-grid">
+        <button id="btnHomeEditor" class="home-card">
+          <div class="card-icon">📝</div>
+          <h2>Escribir Script</h2>
+          <p>Redacta, pega o edita tu guion antes de grabar.</p>
+        </button>
+
+        <button id="btnHomePrompter" class="home-card card-primary">
+          <div class="card-icon">📹</div>
+          <h2>Ir al Teleprompter</h2>
+          <p>Inicia la cámara, ajusta el ritmo y empieza a grabar.</p>
+        </button>
+
+        <button id="btnHomeGallery" class="home-card">
+          <div class="card-icon">📁</div>
+          <h2>Ver Galería</h2>
+          <p>Revisa, descarga o gestiona tus videos grabados.</p>
+        </button>
+      </div>
+
+      <footer class="home-footer">
+        POWERED BY CZAR
+      </footer>
+    </div>
+  </main>
+
   <!-- SECCIÓN 1: EDITOR DE TEXTO -->
-  <main id="section-editor" class="app-section">
+  <main id="section-editor" class="app-section" style="display: none;">
     <div class="editor-container">
       <textarea id="textInput" placeholder="Escribe o pega el guion aquí..."></textarea>
       <div class="editor-actions">
@@ -93,6 +130,6 @@
     </div>
   </div>
 
-  <script src="script.js?v=9"></script>
+  <script src="script.js?v=10"></script>
 </body>
 </html>
