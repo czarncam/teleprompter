@@ -7,6 +7,7 @@ let prompterInterval = null;
 let isPrompterRunning = false;
 let currentFacingMode = 'user';
 let isWideAngle = false;
+let db = null;
 
 // Elementos del DOM
 const navEditor = document.getElementById('navEditor');
@@ -37,6 +38,74 @@ const btnZoom = document.getElementById('btnZoom');
 const videoModal = document.getElementById('videoModal');
 const modalVideoPlayer = document.getElementById('modalVideoPlayer');
 const btnCloseModal = document.getElementById('btnCloseModal');
+
+// 0. INICIALIZACIÓN DE INDEXEDDB (Base de datos local persistente)
+function initDB() {
+  const request = indexedDB.open('TeleprompterDB', 1);
+
+  request.onupgradeneeded = (e) => {
+    db = e.target.result;
+    if (!db.objectStoreNames.contains('videos')) {
+      db.createObjectStore('videos', { keyPath: 'id', autoIncrement: true });
+    }
+  };
+
+  request.onsuccess = (e) => {
+    db = e.target.result;
+    loadVideosFromDB();
+  };
+
+  request.onerror = (e) => {
+    console.error('Error abriendo IndexedDB:', e);
+  };
+}
+
+function saveVideoToDB(blob, dateString) {
+  if (!db) return;
+  const transaction = db.transaction(['videos'], 'readwrite');
+  const store = transaction.objectStore('videos');
+  const videoRecord = { blob: blob, date: dateString };
+  
+  const request = store.add(videoRecord);
+  request.onsuccess = () => {
+    loadVideosFromDB();
+  };
+}
+
+function loadVideosFromDB() {
+  if (!db) return;
+  const transaction = db.transaction(['videos'], 'readonly');
+  const store = transaction.objectStore('videos');
+  const request = store.getAll();
+
+  request.onsuccess = (e) => {
+    // Liberar URLs de Blob anteriores para evitar fugas de memoria
+    recordedVideos.forEach(item => {
+      if (item.url) URL.revokeObjectURL(item.url);
+    });
+
+    const records = e.target.result || [];
+    recordedVideos = records.map(rec => ({
+      id: rec.id,
+      blob: rec.blob,
+      url: URL.createObjectURL(rec.blob),
+      date: rec.date
+    }));
+
+    renderGallery();
+  };
+}
+
+function deleteVideoFromDB(id) {
+  if (!db) return;
+  const transaction = db.transaction(['videos'], 'readwrite');
+  const store = transaction.objectStore('videos');
+  store.delete(id);
+  
+  transaction.oncomplete = () => {
+    loadVideosFromDB();
+  };
+}
 
 // 1. NAVEGACIÓN
 function showSection(sectionToShow, activeBtn) {
@@ -71,11 +140,10 @@ btnGoToPrompter.addEventListener('click', () => {
   showSection(sectionPrompter, navPrompter);
 });
 
-// 2. CONTROL DE CÁMARA OPTIMIZADO PARA IOS/ANDROID
+// 2. CONTROL DE CÁMARA OPTIMIZADO
 async function startCamera() {
   stopCamera();
   
-  // Limitar a 720p a 30fps evita sobrecargar el codificador de video en Safari
   const constraints = {
     video: {
       facingMode: currentFacingMode,
@@ -93,7 +161,6 @@ async function startCamera() {
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
     cameraPreview.srcObject = currentStream;
 
-    // Ajustar zoom para dispositivos Android/Navegadores compatibles
     const videoTrack = currentStream.getVideoTracks()[0];
     if (videoTrack && videoTrack.getCapabilities) {
       const capabilities = videoTrack.getCapabilities();
@@ -170,7 +237,7 @@ btnMirror.addEventListener('click', () => {
   prompterText.classList.toggle('mirror');
 });
 
-// 4. GRABACIÓN DE VIDEO ESTABILIZADA PARA IOS Y ANDROID
+// 4. GRABACIÓN DE VIDEO CON PERSISTENCIA
 function getSupportedMimeType() {
   const types = [
     'video/mp4;codecs=avc1',
@@ -192,20 +259,17 @@ btnRecord.addEventListener('click', () => {
   recordedChunks = [];
   const mimeType = getSupportedMimeType();
 
-  // Control explícito de bitrate para evitar congelamientos en iOS Safari
   const options = {
     mimeType: mimeType || undefined,
-    videoBitsPerSecond: 2500000 // 2.5 Mbps constante
+    videoBitsPerSecond: 2500000 
   };
 
   try {
     mediaRecorder = new MediaRecorder(currentStream, options);
   } catch (e) {
-    console.error('Error al inicializar MediaRecorder con bitrate, reintentando modo por defecto:', e);
     try {
       mediaRecorder = new MediaRecorder(currentStream);
     } catch (err) {
-      console.error('Error crítico al iniciar MediaRecorder:', err);
       return;
     }
   }
@@ -219,19 +283,13 @@ btnRecord.addEventListener('click', () => {
   mediaRecorder.onstop = () => {
     const finalMime = mediaRecorder.mimeType || 'video/mp4';
     const blob = new Blob(recordedChunks, { type: finalMime });
-    const url = URL.createObjectURL(blob);
     const now = new Date();
+    const dateStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + now.toLocaleDateString();
     
-    recordedVideos.push({
-      url: url,
-      blob: blob,
-      date: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + now.toLocaleDateString()
-    });
-    
-    renderGallery();
+    // Guardar en la base de datos interna de forma permanente
+    saveVideoToDB(blob, dateStr);
   };
 
-  // Fragmentar los datos cada 1000ms mantiene el búfer de Safari fluido durante grabaciones largas
   mediaRecorder.start(1000);
   btnRecord.style.display = 'none';
   btnStopRec.style.display = 'flex';
@@ -247,7 +305,7 @@ btnStopRec.addEventListener('click', () => {
   stopPrompter();
 });
 
-// 5. GALERÍA Y MODAL DE REPRODUCCIÓN
+// 5. GALERÍA Y MODAL
 function renderGallery() {
   const galleryGrid = document.getElementById('galleryGrid');
   const videoCount = document.getElementById('videoCount');
@@ -274,7 +332,7 @@ function renderGallery() {
         <small>${item.date}</small>
         <div class="card-actions">
           <button class="btn-download" onclick="downloadVideo(${index})">💾 Guardar</button>
-          <button class="btn-delete" onclick="deleteVideo(${index})">🗑️ Borrar</button>
+          <button class="btn-delete" onclick="deleteVideo(${item.id})">🗑️ Borrar</button>
         </div>
       </div>
     `;
@@ -323,17 +381,14 @@ window.downloadVideo = function(index) {
   }, 100);
 };
 
-window.deleteVideo = function(index) {
-  const item = recordedVideos[index];
-  if (item && item.url) {
-    URL.revokeObjectURL(item.url);
-  }
-  recordedVideos.splice(index, 1);
-  renderGallery();
+window.deleteVideo = function(id) {
+  deleteVideoFromDB(id);
 };
 
-// INICIALIZACIÓN DE EVENTOS
+// INICIALIZACIÓN GENERAL
 document.addEventListener('DOMContentLoaded', () => {
+  initDB(); // Inicializar base de datos
+
   if (btnCloseModal) {
     btnCloseModal.addEventListener('click', window.closeModal);
   }
