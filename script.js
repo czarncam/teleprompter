@@ -5,7 +5,7 @@ let recordedChunks = [];
 let currentStream = null;
 let prompterInterval = null;
 let isPrompterRunning = false;
-let currentFacingMode = 'user'; // 'user' para frontal, 'environment' para trasera
+let currentFacingMode = 'user';
 
 // Elementos del DOM
 const navEditor = document.getElementById('navEditor');
@@ -36,7 +36,7 @@ const videoModal = document.getElementById('videoModal');
 const modalVideoPlayer = document.getElementById('modalVideoPlayer');
 const btnCloseModal = document.getElementById('btnCloseModal');
 
-// 1. NAVEGACIÓN ENTRE SECCIONES
+// 1. NAVEGACIÓN
 function showSection(sectionToShow, activeBtn) {
   [sectionEditor, sectionPrompter, sectionGallery].forEach(sec => {
     if (sec) sec.style.display = 'none';
@@ -69,7 +69,7 @@ btnGoToPrompter.addEventListener('click', () => {
   showSection(sectionPrompter, navPrompter);
 });
 
-// 2. CONTROL DE CÁMARA
+// 2. CÁMARA
 async function startCamera() {
   stopCamera();
   try {
@@ -126,38 +126,44 @@ function stopPrompter() {
 }
 
 btnPlay.addEventListener('click', togglePrompter);
-
 btnReset.addEventListener('click', () => {
   stopPrompter();
   prompterDisplay.scrollTop = 0;
 });
-
 fontSizeInput.addEventListener('input', (e) => {
   prompterText.style.fontSize = `${e.target.value}px`;
 });
-
 btnMirror.addEventListener('click', () => {
   prompterText.classList.toggle('mirror');
 });
 
-// 4. GRABACIÓN DE VIDEO
+// 4. GRABACIÓN DE VIDEO COMPATIBLE CON SAFARI (iOS) Y CHROME (ANDROID)
+function getSupportedMimeType() {
+  const types = [
+    'video/mp4;codecs=avc1',
+    'video/mp4',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+  ];
+  for (let type of types) {
+    if (MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+  return '';
+}
+
 btnRecord.addEventListener('click', () => {
   if (!currentStream) return;
   
   recordedChunks = [];
-  let options = { mimeType: 'video/webm;codecs=vp9' };
-  
-  if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-    options = { mimeType: 'video/mp4' };
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-      options = { mimeType: '' };
-    }
-  }
+  const mimeType = getSupportedMimeType();
+  const options = mimeType ? { mimeType } : {};
 
   try {
     mediaRecorder = new MediaRecorder(currentStream, options);
   } catch (e) {
-    console.error('Exception while creating MediaRecorder:', e);
+    console.error('Error al inicializar MediaRecorder:', e);
     return;
   }
 
@@ -168,12 +174,17 @@ btnRecord.addEventListener('click', () => {
   };
 
   mediaRecorder.onstop = () => {
-    const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/mp4' });
+    const finalMime = mediaRecorder.mimeType || 'video/mp4';
+    const blob = new Blob(recordedChunks, { type: finalMime });
+    const url = URL.createObjectURL(blob);
     const now = new Date();
+    
     recordedVideos.push({
+      url: url,
       blob: blob,
       date: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + now.toLocaleDateString()
     });
+    
     renderGallery();
   };
 
@@ -192,8 +203,9 @@ btnStopRec.addEventListener('click', () => {
   stopPrompter();
 });
 
-// 5. GALERÍA Y MODAL COMPATIBLE CON IOS / ANDROID
+// 5. GALERÍA Y MODAL DE REPRODUCCIÓN
 function renderGallery() {
+  if (!sectionGallery) return;
   const galleryGrid = document.getElementById('galleryGrid');
   const videoCount = document.getElementById('videoCount');
   
@@ -208,19 +220,17 @@ function renderGallery() {
   }
 
   recordedVideos.forEach((item, index) => {
-    const videoBlobUrl = URL.createObjectURL(item.blob);
-
     const card = document.createElement('div');
     card.className = 'video-card';
     card.innerHTML = `
-      <div class="thumb-wrapper" onclick="openVideoModal('${videoBlobUrl}')">
-        <video src="${videoBlobUrl}#t=0.1" preload="metadata" playsinline webkit-playsinline class="thumb-img"></video>
+      <div class="thumb-wrapper" onclick="openVideoModal(${index})">
+        <video src="${item.url}#t=0.1" preload="metadata" playsinline webkit-playsinline class="thumb-img"></video>
         <div class="play-overlay">▶</div>
       </div>
       <div class="card-info">
         <small>${item.date}</small>
         <div class="card-actions">
-          <button class="btn-download" onclick="downloadVideo('${videoBlobUrl}', 'grabacion_${index + 1}.mp4')">💾 Guardar</button>
+          <button class="btn-download" onclick="downloadVideo(${index})">💾 Guardar</button>
           <button class="btn-delete" onclick="deleteVideo(${index})">🗑️ Borrar</button>
         </div>
       </div>
@@ -229,15 +239,20 @@ function renderGallery() {
   });
 }
 
-window.openVideoModal = function(url) {
+window.openVideoModal = function(index) {
+  const item = recordedVideos[index];
+  if (!item) return;
+
   if (videoModal && modalVideoPlayer) {
-    modalVideoPlayer.src = url;
+    modalVideoPlayer.src = item.url;
     videoModal.style.display = 'flex';
     
+    // Reproducción explícita con interacción
+    modalVideoPlayer.load();
     const playPromise = modalVideoPlayer.play();
     if (playPromise !== undefined) {
-      playPromise.catch(error => {
-        console.log("Autoplay prevenido por el navegador:", error);
+      playPromise.catch(() => {
+        // En iOS si falla el autoplay, los controles permiten tocar Play manualmente
       });
     }
   }
@@ -252,11 +267,14 @@ window.closeModal = function() {
   }
 };
 
-window.downloadVideo = function(url, filename) {
+window.downloadVideo = function(index) {
+  const item = recordedVideos[index];
+  if (!item) return;
+
   const a = document.createElement('a');
   a.style.display = 'none';
-  a.href = url;
-  a.download = filename;
+  a.href = item.url;
+  a.download = `grabacion_${index + 1}.mp4`;
   document.body.appendChild(a);
   a.click();
   
@@ -266,11 +284,15 @@ window.downloadVideo = function(url, filename) {
 };
 
 window.deleteVideo = function(index) {
+  const item = recordedVideos[index];
+  if (item && item.url) {
+    URL.revokeObjectURL(item.url); // Liberar memoria de la URL
+  }
   recordedVideos.splice(index, 1);
   renderGallery();
 };
 
-// Eventos de inicialización
+// EVENTOS DE INICIALIZACIÓN
 document.addEventListener('DOMContentLoaded', () => {
   if (btnCloseModal) {
     btnCloseModal.addEventListener('click', window.closeModal);
@@ -284,7 +306,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
-  // Ajuste inicial del tamaño de letra
   if (fontSizeInput && prompterText) {
     prompterText.style.fontSize = `${fontSizeInput.value}px`;
   }
