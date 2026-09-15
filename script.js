@@ -272,29 +272,35 @@ function renderGallery() {
   });
 }
 
-// VER VIDEO EN MODAL DE REPRODUCCIÓN
+// MODAL DE REPRODUCCIÓN
+const videoModal = document.getElementById('videoModal');
+const modalVideoPlayer = document.getElementById('modalVideoPlayer');
+const btnCloseModal = document.getElementById('btnCloseModal');
+
 window.playVideoModal = function(url) {
-  const win = window.open(url, '_blank');
-  if (win) win.focus();
+  if (videoModal && modalVideoPlayer) {
+    modalVideoPlayer.src = url;
+    videoModal.style.display = 'flex';
+    modalVideoPlayer.play().catch(() => {});
+  }
 };
 
-window.downloadVideo = function(id) {
-  const item = dbVideos.find(v => v.id === id);
-  if (!item) return;
+function closeModal() {
+  if (videoModal && modalVideoPlayer) {
+    modalVideoPlayer.pause();
+    modalVideoPlayer.src = '';
+    videoModal.style.display = 'none';
+  }
+}
 
-  const a = document.createElement('a');
-  a.href = item.url;
-  a.download = `teleprompter_${item.id}.${item.ext}`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-};
+btnCloseModal.addEventListener('click', closeModal);
 
-window.deleteVideo = function(id) {
-  dbVideos = dbVideos.filter(item => item.id !== id);
-  videoCount.textContent = dbVideos.length;
-  renderGallery();
-};
+// Cerrar también si se toca el fondo fuera del video
+videoModal.addEventListener('click', (e) => {
+  if (e.target === videoModal) {
+    closeModal();
+  }
+});
 
 // TECLADO
 document.addEventListener('keydown', (e) => {
