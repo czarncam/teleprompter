@@ -2,13 +2,13 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Teleprompter Pro</title>
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 
-  <!-- BARRA DE NAVEGACIÓN SUPERIOR TIPO IOS -->
+  <!-- BARRA DE NAVEGACIÓN SUPERIOR -->
   <header id="main-header">
     <nav>
       <button id="navEditor" class="nav-btn active-nav">
@@ -38,17 +38,14 @@
 
   <!-- SECCIÓN 2: TELEPROMPTER -->
   <main id="section-prompter" class="app-section" style="display: none;">
-    <!-- CÁMARA DE FONDO -->
     <video id="cameraPreview" autoplay playsinline webkit-playsinline muted></video>
 
-    <!-- ÁREA DE TEXTO EN DESPLAZAMIENTO -->
     <div id="prompter-display">
       <div id="prompter-text"></div>
     </div>
 
-    <!-- PANEL FLOTANTE INFERIOR DE CONTROLES ESTILO IPHONE -->
+    <!-- PANEL FLOTANTE INFERIOR DE CONTROLES -->
     <div id="controls" class="ios-bottom-bar">
-      <!-- Fila superior de ajustes (Sliders) -->
       <div class="controls-row settings-row">
         <div class="slider-group">
           <label for="speed">Velocidad</label>
@@ -61,12 +58,10 @@
         <button id="btnMirror" class="btn-icon" title="Modo Espejo">↔</button>
       </div>
 
-      <!-- Fila de acciones principales -->
       <div class="controls-row actions-row">
         <button id="btnReset" class="btn-ios-secondary">↺ Inicio</button>
         <button id="btnPlay" class="btn-ios-secondary">▶ Leer</button>
         
-        <!-- Botón de Grabación Flotante -->
         <button id="btnRecord" class="btn-ios-rec">
           <span class="rec-dot"></span> Grabar
         </button>
@@ -89,6 +84,6 @@
     </div>
   </main>
 
-  <script src="script.js?v=6"></script>
+  <script src="script.js?v=7"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 :root {
   --ios-bg: #000000;
-  --ios-card-bg: rgba(28, 28, 30, 0.75);
+  --ios-card-bg: rgba(28, 28, 30, 0.85);
   --ios-blur: blur(25px);
   --ios-accent: #0a84ff;
   --ios-red: #ff453a;
@@ -22,6 +22,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
   overflow: hidden;
   height: 100vh;
+  height: 100dvh; /* Soporte nativo para Safari iOS */
 }
 
 /* NAVEGACIÓN SUPERIOR */
@@ -36,6 +37,7 @@ body {
   -webkit-backdrop-filter: var(--ios-blur);
   z-index: 100;
   border-bottom: 1px solid var(--ios-border);
+  padding-top: env(safe-area-inset-top);
 }
 
 nav {
@@ -56,7 +58,7 @@ nav {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border-radius: 20px;
   transition: all 0.2s ease;
 }
@@ -72,6 +74,7 @@ nav {
   top: 50px;
   width: 100%;
   height: calc(100vh - 50px);
+  height: calc(100dvh - 50px);
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -123,6 +126,7 @@ textarea {
   left: 0;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   object-fit: cover;
   opacity: 0.45;
   z-index: 1;
@@ -135,6 +139,7 @@ textarea {
   left: 0;
   width: 100%;
   height: calc(100vh - 160px);
+  height: calc(100dvh - 160px);
   overflow-y: scroll;
   -webkit-overflow-scrolling: touch;
   padding: 0 8%;
@@ -163,7 +168,7 @@ textarea {
 /* PANEL INFERIOR FLOTANTE ESTILO IOS */
 .ios-bottom-bar {
   position: fixed;
-  bottom: 15px;
+  bottom: calc(15px + env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
   width: calc(100% - 30px);
@@ -222,7 +227,6 @@ textarea {
   font-size: 14px;
 }
 
-/* BOTONES DE ACCIÓN */
 .btn-ios-secondary {
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
@@ -267,9 +271,9 @@ textarea {
   border-radius: 2px;
 }
 
-/* GALERÍA */
+/* GALERÍA - CORRECCIÓN DE PADDING PARA MINIATURAS CORTADAS */
 #section-gallery {
-  padding: 20px;
+  padding: 20px 20px calc(80px + env(safe-area-inset-bottom)) 20px;
 }
 
 .gallery-container {
@@ -287,6 +291,7 @@ textarea {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 15px;
+  padding-bottom: 40px; /* Margen inferior extra para mostrar las últimas miniaturas completas */
 }
 
 .video-card {
