@@ -6,6 +6,7 @@ let currentStream = null;
 let prompterInterval = null;
 let isPrompterRunning = false;
 let currentFacingMode = 'user';
+let isWideAngle = false;
 
 // Elementos del DOM
 const navEditor = document.getElementById('navEditor');
@@ -31,6 +32,7 @@ const btnPlay = document.getElementById('btnPlay');
 const btnRecord = document.getElementById('btnRecord');
 const btnStopRec = document.getElementById('btnStopRec');
 const btnSwitchCam = document.getElementById('btnSwitchCam');
+const btnZoom = document.getElementById('btnZoom');
 
 const videoModal = document.getElementById('videoModal');
 const modalVideoPlayer = document.getElementById('modalVideoPlayer');
@@ -69,16 +71,34 @@ btnGoToPrompter.addEventListener('click', () => {
   showSection(sectionPrompter, navPrompter);
 });
 
-// 2. CÁMARA
+// 2. CONTROL DE CÁMARA Y ZOOM (0.5x / 1x)
 async function startCamera() {
   stopCamera();
+  
+  const constraints = {
+    video: {
+      facingMode: currentFacingMode,
+      width: { ideal: 1920 },
+      height: { ideal: 1080 }
+    },
+    audio: true
+  };
+
   try {
-    const constraints = {
-      video: { facingMode: currentFacingMode },
-      audio: true
-    };
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
     cameraPreview.srcObject = currentStream;
+
+    // Ajustar zoom para dispositivos Android/Browsers compatibles con Hardware Zoom
+    const videoTrack = currentStream.getVideoTracks()[0];
+    if (videoTrack && videoTrack.getCapabilities) {
+      const capabilities = videoTrack.getCapabilities();
+      if (capabilities.zoom) {
+        const targetZoom = isWideAngle ? capabilities.zoom.min : 1;
+        videoTrack.applyConstraints({
+          advanced: [{ zoom: targetZoom }]
+        }).catch(() => {});
+      }
+    }
   } catch (err) {
     console.error("Error al acceder a la cámara:", err);
   }
@@ -95,6 +115,14 @@ btnSwitchCam.addEventListener('click', () => {
   currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
   startCamera();
 });
+
+if (btnZoom) {
+  btnZoom.addEventListener('click', () => {
+    isWideAngle = !isWideAngle;
+    btnZoom.textContent = isWideAngle ? "🔍 1x" : "🔍 0.5x";
+    startCamera();
+  });
+}
 
 // 3. TELEPROMPTER
 function togglePrompter() {
@@ -137,13 +165,13 @@ btnMirror.addEventListener('click', () => {
   prompterText.classList.toggle('mirror');
 });
 
-// 4. GRABACIÓN DE VIDEO COMPATIBLE CON SAFARI (iOS) Y CHROME (ANDROID)
+// 4. GRABACIÓN DE VIDEO COMPATIBLE CON IOS Y ANDROID
 function getSupportedMimeType() {
   const types = [
     'video/mp4;codecs=avc1',
     'video/mp4',
     'video/webm;codecs=vp8,opus',
-    'video/webm',
+    'video/webm'
   ];
   for (let type of types) {
     if (MediaRecorder.isTypeSupported(type)) {
@@ -205,7 +233,6 @@ btnStopRec.addEventListener('click', () => {
 
 // 5. GALERÍA Y MODAL DE REPRODUCCIÓN
 function renderGallery() {
-  if (!sectionGallery) return;
   const galleryGrid = document.getElementById('galleryGrid');
   const videoCount = document.getElementById('videoCount');
   
@@ -247,13 +274,10 @@ window.openVideoModal = function(index) {
     modalVideoPlayer.src = item.url;
     videoModal.style.display = 'flex';
     
-    // Reproducción explícita con interacción
     modalVideoPlayer.load();
     const playPromise = modalVideoPlayer.play();
     if (playPromise !== undefined) {
-      playPromise.catch(() => {
-        // En iOS si falla el autoplay, los controles permiten tocar Play manualmente
-      });
+      playPromise.catch(() => {});
     }
   }
 };
@@ -286,13 +310,13 @@ window.downloadVideo = function(index) {
 window.deleteVideo = function(index) {
   const item = recordedVideos[index];
   if (item && item.url) {
-    URL.revokeObjectURL(item.url); // Liberar memoria de la URL
+    URL.revokeObjectURL(item.url);
   }
   recordedVideos.splice(index, 1);
   renderGallery();
 };
 
-// EVENTOS DE INICIALIZACIÓN
+// INICIALIZACIÓN
 document.addEventListener('DOMContentLoaded', () => {
   if (btnCloseModal) {
     btnCloseModal.addEventListener('click', window.closeModal);
