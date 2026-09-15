@@ -2,69 +2,93 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mi Teleprompter Pro</title>
-  <link rel="stylesheet" href="style.css?v=5">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Teleprompter Pro</title>
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
-  <!-- BARRA DE NAVEGACIÓN -->
+
+  <!-- BARRA DE NAVEGACIÓN SUPERIOR TIPO IOS -->
   <header id="main-header">
     <nav>
-      <button id="navEditor" class="active-nav">📝 Editor</button>
-      <button id="navPrompter">🎥 Teleprompter</button>
-      <button id="navGallery">📁 Galería (<span id="videoCount">0</span>)</button>
+      <button id="navEditor" class="nav-btn active-nav">
+        <span class="nav-icon">📝</span>
+        <span>Editor</span>
+      </button>
+      <button id="navPrompter" class="nav-btn">
+        <span class="nav-icon">📹</span>
+        <span>Prompter</span>
+      </button>
+      <button id="navGallery" class="nav-btn">
+        <span class="nav-icon">📁</span>
+        <span>Galería (<span id="videoCount">0</span>)</span>
+      </button>
     </nav>
   </header>
 
-  <!-- SECCIÓN 1: EDITOR -->
+  <!-- SECCIÓN 1: EDITOR DE TEXTO -->
   <main id="section-editor" class="app-section">
-    <textarea id="textInput" placeholder="Pega tu texto aquí sin límite de caracteres..."></textarea>
-    <div class="editor-actions">
-      <button id="btnGoToPrompter" class="btn-primary">Ir al Teleprompter ▶</button>
+    <div class="editor-container">
+      <textarea id="textInput" placeholder="Escribe o pega el guion aquí..."></textarea>
+      <div class="editor-actions">
+        <button id="btnGoToPrompter" class="btn-ios-primary">Ir al Teleprompter ▶</button>
+      </div>
     </div>
   </main>
 
   <!-- SECCIÓN 2: TELEPROMPTER -->
   <main id="section-prompter" class="app-section" style="display: none;">
-    <!-- CÁMARA FIJA DE FONDO (Fuera del contenedor con scroll) -->
+    <!-- CÁMARA DE FONDO -->
     <video id="cameraPreview" autoplay playsinline webkit-playsinline muted></video>
 
-    <!-- BARRA DE CONTROLES -->
-    <div id="controls">
-      <button id="btnPlay">▶ Iniciar Lectura</button>
-      <button id="btnReset">↺ Inicio</button>
-      
-      <div class="rec-group">
-        <button id="btnRecord">🔴 Grabar</button>
-        <button id="btnPauseRec" style="display: none;">⏸ Pausar Rec</button>
-        <button id="btnStopRec" style="display: none;">⏹ Finalizar Rec</button>
-      </div>
-
-      <button id="btnSwitchCam">🔄 Cambiar Cámara</button>
-
-      <label>Velocidad: 
-        <input type="range" id="speed" min="0.2" max="5" step="0.1" value="1">
-      </label>
-      <label>Tamaño: 
-        <input type="range" id="fontSize" min="20" max="80" value="36">
-      </label>
-      <button id="btnMirror">↔ Espejo</button>
-    </div>
-
-    <!-- TEXTO EN DESPLAZAMIENTO -->
+    <!-- ÁREA DE TEXTO EN DESPLAZAMIENTO -->
     <div id="prompter-display">
       <div id="prompter-text"></div>
     </div>
-  </main>
 
-  <!-- SECCIÓN 3: GALERÍA -->
-  <main id="section-gallery" class="app-section" style="display: none;">
-    <h2 class="gallery-title">Mis Grabaciones</h2>
-    <div id="galleryGrid" class="gallery-grid">
-      <p id="emptyGalleryMsg">No hay videos grabados aún.</p>
+    <!-- PANEL FLOTANTE INFERIOR DE CONTROLES ESTILO IPHONE -->
+    <div id="controls" class="ios-bottom-bar">
+      <!-- Fila superior de ajustes (Sliders) -->
+      <div class="controls-row settings-row">
+        <div class="slider-group">
+          <label for="speed">Velocidad</label>
+          <input type="range" id="speed" min="0.2" max="5" step="0.1" value="1">
+        </div>
+        <div class="slider-group">
+          <label for="fontSize">Tamaño</label>
+          <input type="range" id="fontSize" min="20" max="80" value="36">
+        </div>
+        <button id="btnMirror" class="btn-icon" title="Modo Espejo">↔</button>
+      </div>
+
+      <!-- Fila de acciones principales -->
+      <div class="controls-row actions-row">
+        <button id="btnReset" class="btn-ios-secondary">↺ Inicio</button>
+        <button id="btnPlay" class="btn-ios-secondary">▶ Leer</button>
+        
+        <!-- Botón de Grabación Flotante -->
+        <button id="btnRecord" class="btn-ios-rec">
+          <span class="rec-dot"></span> Grabar
+        </button>
+        <button id="btnStopRec" class="btn-ios-rec recording" style="display: none;">
+          <span class="square-dot"></span> Detener
+        </button>
+
+        <button id="btnSwitchCam" class="btn-ios-secondary">🔄 Cámara</button>
+      </div>
     </div>
   </main>
 
-  <script src="script.js?v=5"></script>
+  <!-- SECCIÓN 3: GALERÍA DE GRABACIONES -->
+  <main id="section-gallery" class="app-section" style="display: none;">
+    <div class="gallery-container">
+      <h2 class="gallery-title">Grabaciones</h2>
+      <div id="galleryGrid" class="gallery-grid">
+        <p id="emptyGalleryMsg">No hay videos grabados aún.</p>
+      </div>
+    </div>
+  </main>
+
+  <script src="script.js?v=6"></script>
 </body>
 </html>

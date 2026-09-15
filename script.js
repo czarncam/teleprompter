@@ -11,7 +11,6 @@ const btnGoToPrompter = document.getElementById('btnGoToPrompter');
 const btnPlay = document.getElementById('btnPlay');
 const btnReset = document.getElementById('btnReset');
 const btnRecord = document.getElementById('btnRecord');
-const btnPauseRec = document.getElementById('btnPauseRec');
 const btnStopRec = document.getElementById('btnStopRec');
 const btnSwitchCam = document.getElementById('btnSwitchCam');
 const btnMirror = document.getElementById('btnMirror');
@@ -30,30 +29,14 @@ const videoCount = document.getElementById('videoCount');
 let isPlaying = false;
 let animationFrameId = null;
 let lastTimeStamp = 0;
-let rawCameraStream = null;
-let recordStream = null;
+let mediaStream = null;
 let mediaRecorder = null;
 let recordedChunks = [];
 let dbVideos = [];
-let selectedMimeType = '';
 let currentFacingMode = 'user';
 let isRecording = false;
 
-// CANVAS DE DIBUJO PARA GRABACIÓN CONTINUA
-const canvas = document.createElement('canvas');
-const ctx = canvas.getContext('2d');
-let canvasAnimId = null;
-
-function renderCanvas() {
-  if (video.videoWidth > 0 && video.videoHeight > 0) {
-    if (canvas.width !== video.videoWidth) canvas.width = video.videoWidth;
-    if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  }
-  canvasAnimId = requestAnimationFrame(renderCanvas);
-}
-
-// INICIALIZACIÓN
+// INICIALIZACIÓN DE NAVEGACIÓN
 navEditor.addEventListener('click', () => switchSection('editor'));
 navPrompter.addEventListener('click', () => switchSection('prompter'));
 navGallery.addEventListener('click', () => switchSection('gallery'));
@@ -64,7 +47,7 @@ function switchSection(target) {
   [navEditor, navPrompter, navGallery].forEach(n => n.classList.remove('active-nav'));
 
   if (target === 'editor') {
-    secEditor.style.display = 'flex';
+    secEditor.style.display = 'block';
     navEditor.classList.add('active-nav');
     stopCamera();
     stopScroll();
@@ -82,11 +65,11 @@ function switchSection(target) {
   }
 }
 
-// CÁMARA
+// INICIALIZACIÓN DE CÁMARA
 async function startCamera() {
-  stopCameraTracks();
+  stopCamera();
   try {
-    rawCameraStream = await navigator.mediaDevices.getUserMedia({
+    mediaStream = await navigator.mediaDevices.getUserMedia({
       video: { 
         facingMode: currentFacingMode,
         width: { ideal: 1280 }, 
@@ -95,63 +78,42 @@ async function startCamera() {
       audio: true
     });
 
-    if (video && rawCameraStream) {
-      video.srcObject = rawCameraStream;
+    if (video && mediaStream) {
+      video.srcObject = mediaStream;
       video.setAttribute('playsinline', 'true');
       video.setAttribute('webkit-playsinline', 'true');
       video.muted = true;
       await video.play();
-      
-      if (!canvasAnimId) renderCanvas();
     }
   } catch (err) {
-    console.error('Error al acceder a la cámara: ', err);
-  }
-}
-
-function stopCameraTracks() {
-  if (rawCameraStream) {
-    rawCameraStream.getTracks().forEach(track => track.stop());
-    rawCameraStream = null;
+    console.error('Error al inicializar cámara: ', err);
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      if (video) {
+        video.srcObject = mediaStream;
+        await video.play();
+      }
+    } catch (e) {
+      alert('No se pudo acceder a la cámara.');
+    }
   }
 }
 
 function stopCamera() {
-  if (!isRecording) {
-    stopCameraTracks();
+  if (mediaStream && !isRecording) {
+    mediaStream.getTracks().forEach(track => track.stop());
+    mediaStream = null;
     if (video) video.srcObject = null;
-    if (canvasAnimId) {
-      cancelAnimationFrame(canvasAnimId);
-      canvasAnimId = null;
-    }
   }
 }
 
-// CAMBIO DE CÁMARA FLUIDO SIN DETENER GRABACIÓN
+// CAMBIO DE CÁMARA (DETIENE GRABACIÓN ANTERIOR SI ESTÁ ACTIVA)
 btnSwitchCam.addEventListener('click', async () => {
-  currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-
-  // Solo reiniciamos la captura de hardware, el stream del Canvas permanece intacto
-  stopCameraTracks();
-
-  try {
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      video: { 
-        facingMode: currentFacingMode,
-        width: { ideal: 1280 }, 
-        height: { ideal: 720 } 
-      },
-      audio: true
-    });
-
-    rawCameraStream = newStream;
-    if (video) {
-      video.srcObject = rawCameraStream;
-      await video.play();
-    }
-  } catch (err) {
-    console.error('Error al cambiar de cámara: ', err);
+  if (isRecording) {
+    stopRecording();
   }
+  currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+  await startCamera();
 });
 
 // DESPLAZAMIENTO DEL TEXTO
@@ -190,7 +152,7 @@ function togglePlay() {
 
 function stopScroll() {
   isPlaying = false;
-  btnPlay.textContent = '▶ Iniciar Lectura';
+  btnPlay.textContent = '▶ Leer';
   if (animationFrameId) {
     cancelAnimationFrame(animationFrameId);
     animationFrameId = null;
@@ -202,13 +164,12 @@ function resetScroll() {
   prompterDisplay.scrollTop = 0;
 }
 
-// FORMATOS
+// DETERMINAR FORMATO COMPATIBLE CON IOS / ANDROID
 function getSupportedMimeType() {
   const types = [
     'video/mp4;codecs=h264,aac',
     'video/mp4',
     'video/webm;codecs=h264',
-    'video/webm;codecs=vp9,opus',
     'video/webm'
   ];
   for (let type of types) {
@@ -217,88 +178,73 @@ function getSupportedMimeType() {
   return '';
 }
 
-// GRABACIÓN CONTINUA VIA CANVAS + AUDIO
+// GRABACIÓN
 btnRecord.addEventListener('click', startRecording);
-btnPauseRec.addEventListener('click', pauseRecording);
 btnStopRec.addEventListener('click', stopRecording);
 
 function startRecording() {
-  if (!rawCameraStream) return;
+  if (!mediaStream) return;
   recordedChunks = [];
   isRecording = true;
-
-  // 1. Extraer stream continuo del Canvas a 30 FPS
-  const canvasStream = canvas.captureStream(30);
-
-  // 2. Extraer audio de la cámara e integrarlo al Stream de grabación
-  const audioTrack = rawCameraStream.getAudioTracks()[0];
-  if (audioTrack) {
-    canvasStream.addTrack(audioTrack);
-  }
-
-  recordStream = canvasStream;
-  selectedMimeType = getSupportedMimeType();
-  const options = selectedMimeType ? { mimeType: selectedMimeType } : {};
+  
+  const mimeType = getSupportedMimeType();
+  const options = mimeType ? { mimeType } : {};
 
   try {
-    mediaRecorder = new MediaRecorder(recordStream, options);
+    mediaRecorder = new MediaRecorder(mediaStream, options);
   } catch (e) {
-    mediaRecorder = new MediaRecorder(recordStream);
+    mediaRecorder = new MediaRecorder(mediaStream);
   }
 
   mediaRecorder.ondataavailable = (e) => {
     if (e.data && e.data.size > 0) recordedChunks.push(e.data);
   };
 
-  mediaRecorder.onstop = saveToGallery;
+  mediaRecorder.onstop = processAndSaveVideo;
   mediaRecorder.start(1000);
 
   btnRecord.style.display = 'none';
-  btnPauseRec.style.display = 'inline-block';
-  btnStopRec.style.display = 'inline-block';
-}
-
-function pauseRecording() {
-  if (!mediaRecorder) return;
-  if (mediaRecorder.state === 'recording') {
-    mediaRecorder.pause();
-    btnPauseRec.textContent = '▶ Continuar Rec';
-  } else if (mediaRecorder.state === 'paused') {
-    mediaRecorder.resume();
-    btnPauseRec.textContent = '⏸ Pausar Rec';
-  }
+  btnStopRec.style.display = 'flex';
 }
 
 function stopRecording() {
   if (!mediaRecorder) return;
   isRecording = false;
   mediaRecorder.stop();
-  btnRecord.style.display = 'inline-block';
-  btnPauseRec.style.display = 'none';
+  btnRecord.style.display = 'flex';
   btnStopRec.style.display = 'none';
-  btnPauseRec.textContent = '⏸ Pausar Rec';
 }
 
-// GALERÍA
-function saveToGallery() {
-  const actualType = mediaRecorder.mimeType || selectedMimeType || 'video/mp4';
-  const isMp4 = actualType.includes('mp4');
-  const extension = isMp4 ? 'mp4' : 'webm';
+// CAPTURA DE MINIATURA MEDIANTE CANVAS (COMPATIBILIDAD 100% IOS / SAFARI)
+async function processAndSaveVideo() {
+  const mimeType = mediaRecorder.mimeType || 'video/mp4';
+  const isMp4 = mimeType.includes('mp4');
+  const ext = isMp4 ? 'mp4' : 'webm';
   
-  const blob = new Blob(recordedChunks, { type: actualType });
+  const blob = new Blob(recordedChunks, { type: mimeType });
   const videoUrl = URL.createObjectURL(blob);
-  
+
+  // Generar foto miniatura desde la cámara actual mediante Canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 360;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.7);
+
   const videoItem = {
     id: Date.now(),
     url: videoUrl,
+    thumb: thumbnailUrl,
     date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    ext: extension
+    ext: ext
   };
   
   dbVideos.unshift(videoItem);
   videoCount.textContent = dbVideos.length;
 }
 
+// RENDRERIZADO DE GALERÍA DE MINIATURAS
 function renderGallery() {
   galleryGrid.innerHTML = '';
   if (dbVideos.length === 0) {
@@ -309,19 +255,28 @@ function renderGallery() {
   dbVideos.forEach(item => {
     const card = document.createElement('div');
     card.className = 'video-card';
-    
-    // Agregamos evento onloadeddata="this.currentTime=0.1" para cargar la miniatura inmediatamente
     card.innerHTML = `
-      <video src="${item.url}#t=0.1" controls playsinline webkit-playsinline preload="metadata" onloadeddata="this.currentTime=0.1"></video>
-      <small>${item.date} (${item.ext.toUpperCase()})</small>
-      <div class="card-actions">
-        <button class="btn-download" onclick="downloadVideo(${item.id})">💾 Guardar</button>
-        <button class="btn-delete" onclick="deleteVideo(${item.id})">🗑 Borrar</button>
+      <div class="thumb-wrapper" onclick="playVideoModal('${item.url}')">
+        <img src="${item.thumb}" class="thumb-img" alt="Miniatura">
+        <div class="play-overlay">▶</div>
+      </div>
+      <div class="card-info">
+        <small>${item.date} (${item.ext.toUpperCase()})</small>
+        <div class="card-actions">
+          <button class="btn-download" onclick="downloadVideo(${item.id})">💾 Guardar</button>
+          <button class="btn-delete" onclick="deleteVideo(${item.id})">🗑 Borrar</button>
+        </div>
       </div>
     `;
     galleryGrid.appendChild(card);
   });
 }
+
+// VER VIDEO EN MODAL DE REPRODUCCIÓN
+window.playVideoModal = function(url) {
+  const win = window.open(url, '_blank');
+  if (win) win.focus();
+};
 
 window.downloadVideo = function(id) {
   const item = dbVideos.find(v => v.id === id);
