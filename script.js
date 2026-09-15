@@ -67,19 +67,18 @@ function switchSection(target) {
   }
 }
 
-// CÁMARA Y CAMBIO DE FRONTAL/TRASERA SIN CORTAR GRABACIÓN
+// CÁMARA INICIALIZACIÓN
 async function startCamera() {
   stopCamera();
   try {
+    // Eliminamos 'exact' en la inicialización para mayor compatibilidad con dispositivos Android/iOS
     mediaStream = await navigator.mediaDevices.getUserMedia({
       video: { 
-        facingMode: { exact: currentFacingMode },
+        facingMode: currentFacingMode,
         width: { ideal: 1280 }, 
         height: { ideal: 720 } 
       },
       audio: true
-    }).catch(async () => {
-      return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
     });
 
     if (video && mediaStream) {
@@ -91,6 +90,16 @@ async function startCamera() {
     }
   } catch (err) {
     console.error('Error al acceder a la cámara: ', err);
+    // Fallback general si falla la configuración específica
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      if (video && mediaStream) {
+        video.srcObject = mediaStream;
+        await video.play();
+      }
+    } catch (e) {
+      console.error('Error fatal al acceder a cualquier cámara: ', e);
+    }
   }
 }
 
@@ -102,24 +111,54 @@ function stopCamera() {
   }
 }
 
+// CAMBIO DE CÁMARA COMPATIBLE EN TIEMPO REAL (IOS Y ANDROID)
 btnSwitchCam.addEventListener('click', async () => {
   currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-  
+
   if (isRecording && mediaRecorder && mediaStream) {
-    // Si está grabando, cambia la pista de video sobre la marcha sin detener la grabación
-    const newStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { exact: currentFacingMode } },
-      audio: true
-    });
-    
-    const newVideoTrack = newStream.getVideoTracks()[0];
-    const oldVideoTrack = mediaStream.getVideoTracks()[0];
-    
-    mediaStream.removeTrack(oldVideoTrack);
-    oldVideoTrack.stop();
-    mediaStream.addTrack(newVideoTrack);
-    
-    if (video) video.srcObject = mediaStream;
+    try {
+      // 1. Pausar la grabación para prevenir la corrupción del archivo en iOS/Android
+      let isPausedBySwitch = false;
+      if (mediaRecorder.state === 'recording') {
+        mediaRecorder.pause();
+        isPausedBySwitch = true;
+      }
+
+      // 2. Intentar solicitar la nueva cámara
+      let newStream;
+      try {
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: currentFacingMode } },
+          audio: false
+        });
+      } catch (e) {
+        // Fallback sin 'exact' en caso de no soportar la restricción estricta
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: currentFacingMode },
+          audio: false
+        });
+      }
+
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      const oldVideoTrack = mediaStream.getVideoTracks()[0];
+
+      // 3. Reemplazar pista de video sin detener el stream principal ni la grabación
+      mediaStream.removeTrack(oldVideoTrack);
+      oldVideoTrack.stop();
+      mediaStream.addTrack(newVideoTrack);
+
+      if (video) video.srcObject = mediaStream;
+
+      // 4. Pausa de 500ms para estabilizar la autoexposición y balance de blancos antes de reanudar
+      setTimeout(() => {
+        if (mediaRecorder && mediaRecorder.state === 'paused' && isPausedBySwitch) {
+          mediaRecorder.resume();
+        }
+      }, 500);
+
+    } catch (err) {
+      console.error('Error al cambiar de cámara en caliente: ', err);
+    }
   } else {
     await startCamera();
   }
@@ -300,7 +339,7 @@ window.deleteVideo = function(id) {
   renderGallery();
 };
 
-// Teclado
+// TECLADO
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space' && document.activeElement !== textInput && secPrompter.style.display !== 'none') {
     e.preventDefault();
@@ -308,7 +347,7 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// Service Worker
+// SERVICE WORKER
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js');
 }
