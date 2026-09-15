@@ -1,270 +1,227 @@
-// Navegación
+// Estado global de la aplicación
+let recordedVideos = []; 
+let mediaRecorder = null;
+let recordedChunks = [];
+let currentStream = null;
+let prompterInterval = null;
+let isPrompterRunning = false;
+let currentFacingMode = 'user'; // 'user' para frontal, 'environment' para trasera
+
+// Elementos del DOM
 const navEditor = document.getElementById('navEditor');
 const navPrompter = document.getElementById('navPrompter');
 const navGallery = document.getElementById('navGallery');
-const secEditor = document.getElementById('section-editor');
-const secPrompter = document.getElementById('section-prompter');
-const secGallery = document.getElementById('section-gallery');
-const btnGoToPrompter = document.getElementById('btnGoToPrompter');
 
-// Teleprompter
-const btnPlay = document.getElementById('btnPlay');
+const sectionEditor = document.getElementById('section-editor');
+const sectionPrompter = document.getElementById('section-prompter');
+const sectionGallery = document.getElementById('section-gallery');
+
+const textInput = document.getElementById('textInput');
+const btnGoToPrompter = document.getElementById('btnGoToPrompter');
+const prompterDisplay = document.getElementById('prompter-display');
+const prompterText = document.getElementById('prompter-text');
+const cameraPreview = document.getElementById('cameraPreview');
+
+const speedInput = document.getElementById('speed');
+const fontSizeInput = document.getElementById('fontSize');
+const btnMirror = document.getElementById('btnMirror');
+
 const btnReset = document.getElementById('btnReset');
+const btnPlay = document.getElementById('btnPlay');
 const btnRecord = document.getElementById('btnRecord');
 const btnStopRec = document.getElementById('btnStopRec');
 const btnSwitchCam = document.getElementById('btnSwitchCam');
-const btnMirror = document.getElementById('btnMirror');
-const speedInput = document.getElementById('speed');
-const fontSizeInput = document.getElementById('fontSize');
-const textInput = document.getElementById('textInput');
-const prompterDisplay = document.getElementById('prompter-display');
-const prompterText = document.getElementById('prompter-text');
-const video = document.getElementById('cameraPreview');
 
-// Galería
-const galleryGrid = document.getElementById('galleryGrid');
-const emptyGalleryMsg = document.getElementById('emptyGalleryMsg');
-const videoCount = document.getElementById('videoCount');
+const videoModal = document.getElementById('videoModal');
+const modalVideoPlayer = document.getElementById('modalVideoPlayer');
+const btnCloseModal = document.getElementById('btnCloseModal');
 
-let isPlaying = false;
-let animationFrameId = null;
-let lastTimeStamp = 0;
-let mediaStream = null;
-let mediaRecorder = null;
-let recordedChunks = [];
-let dbVideos = [];
-let currentFacingMode = 'user';
-let isRecording = false;
+// 1. NAVEGACIÓN ENTRE SECCIONES
+function showSection(sectionToShow, activeBtn) {
+  [sectionEditor, sectionPrompter, sectionGallery].forEach(sec => {
+    if (sec) sec.style.display = 'none';
+  });
+  [navEditor, navPrompter, navGallery].forEach(btn => {
+    if (btn) btn.classList.remove('active-nav');
+  });
 
-// INICIALIZACIÓN DE NAVEGACIÓN
-navEditor.addEventListener('click', () => switchSection('editor'));
-navPrompter.addEventListener('click', () => switchSection('prompter'));
-navGallery.addEventListener('click', () => switchSection('gallery'));
-btnGoToPrompter.addEventListener('click', () => switchSection('prompter'));
+  if (sectionToShow) sectionToShow.style.display = 'block';
+  if (activeBtn) activeBtn.classList.add('active-nav');
 
-function switchSection(target) {
-  [secEditor, secPrompter, secGallery].forEach(s => s.style.display = 'none');
-  [navEditor, navPrompter, navGallery].forEach(n => n.classList.remove('active-nav'));
-
-  if (target === 'editor') {
-    secEditor.style.display = 'block';
-    navEditor.classList.add('active-nav');
-    stopCamera();
-    stopScroll();
-  } else if (target === 'prompter') {
-    secPrompter.style.display = 'block';
-    navPrompter.classList.add('active-nav');
-    prompterText.textContent = textInput.value || "Ingresa un texto en el editor...";
+  if (sectionToShow === sectionPrompter) {
     startCamera();
-  } else if (target === 'gallery') {
-    secGallery.style.display = 'block';
-    navGallery.classList.add('active-nav');
+  } else {
     stopCamera();
-    stopScroll();
+    stopPrompter();
+  }
+
+  if (sectionToShow === sectionGallery) {
     renderGallery();
   }
 }
 
-// INICIALIZACIÓN DE CÁMARA
+navEditor.addEventListener('click', () => showSection(sectionEditor, navEditor));
+navPrompter.addEventListener('click', () => showSection(sectionPrompter, navPrompter));
+navGallery.addEventListener('click', () => showSection(sectionGallery, navGallery));
+
+btnGoToPrompter.addEventListener('click', () => {
+  prompterText.textContent = textInput.value || 'Escribe tu guion en el editor...';
+  showSection(sectionPrompter, navPrompter);
+});
+
+// 2. CONTROL DE CÁMARA
 async function startCamera() {
   stopCamera();
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: { 
-        facingMode: currentFacingMode,
-        width: { ideal: 1280 }, 
-        height: { ideal: 720 } 
-      },
+    const constraints = {
+      video: { facingMode: currentFacingMode },
       audio: true
-    });
-
-    if (video && mediaStream) {
-      video.srcObject = mediaStream;
-      video.setAttribute('playsinline', 'true');
-      video.setAttribute('webkit-playsinline', 'true');
-      video.muted = true;
-      await video.play();
-    }
+    };
+    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+    cameraPreview.srcObject = currentStream;
   } catch (err) {
-    console.error('Error al inicializar cámara: ', err);
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      if (video) {
-        video.srcObject = mediaStream;
-        await video.play();
-      }
-    } catch (e) {
-      alert('No se pudo acceder a la cámara.');
-    }
+    console.error("Error al acceder a la cámara:", err);
   }
 }
 
 function stopCamera() {
-  if (mediaStream && !isRecording) {
-    mediaStream.getTracks().forEach(track => track.stop());
-    mediaStream = null;
-    if (video) video.srcObject = null;
+  if (currentStream) {
+    currentStream.getTracks().forEach(track => track.stop());
+    currentStream = null;
   }
 }
 
-// CAMBIO DE CÁMARA (DETIENE GRABACIÓN ANTERIOR SI ESTÁ ACTIVA)
-btnSwitchCam.addEventListener('click', async () => {
-  if (isRecording) {
-    stopRecording();
-  }
+btnSwitchCam.addEventListener('click', () => {
   currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-  await startCamera();
+  startCamera();
 });
 
-// DESPLAZAMIENTO DEL TEXTO
-btnPlay.addEventListener('click', togglePlay);
-btnReset.addEventListener('click', resetScroll);
-btnMirror.addEventListener('click', () => prompterText.classList.toggle('mirror'));
+// 3. TELEPROMPTER
+function togglePrompter() {
+  if (isPrompterRunning) {
+    stopPrompter();
+  } else {
+    startPrompter();
+  }
+}
+
+function startPrompter() {
+  if (isPrompterRunning) return;
+  isPrompterRunning = true;
+  btnPlay.textContent = '⏸ Pausa';
+
+  const speed = parseFloat(speedInput.value) || 1;
+  prompterInterval = setInterval(() => {
+    prompterDisplay.scrollTop += speed;
+  }, 20);
+}
+
+function stopPrompter() {
+  isPrompterRunning = false;
+  if (btnPlay) btnPlay.textContent = '▶ Leer';
+  if (prompterInterval) {
+    clearInterval(prompterInterval);
+    prompterInterval = null;
+  }
+}
+
+btnPlay.addEventListener('click', togglePrompter);
+
+btnReset.addEventListener('click', () => {
+  stopPrompter();
+  prompterDisplay.scrollTop = 0;
+});
+
 fontSizeInput.addEventListener('input', (e) => {
   prompterText.style.fontSize = `${e.target.value}px`;
 });
 
-function step(timestamp) {
-  if (!lastTimeStamp) lastTimeStamp = timestamp;
-  const progress = timestamp - lastTimeStamp;
+btnMirror.addEventListener('click', () => {
+  prompterText.classList.toggle('mirror');
+});
 
-  if (progress > 20) {
-    const speed = parseFloat(speedInput.value);
-    prompterDisplay.scrollTop += speed * (progress / 16.6);
-    lastTimeStamp = timestamp;
-  }
-
-  if (isPlaying) {
-    animationFrameId = requestAnimationFrame(step);
-  }
-}
-
-function togglePlay() {
-  if (!isPlaying) {
-    isPlaying = true;
-    btnPlay.textContent = '⏸ Pausa';
-    lastTimeStamp = 0;
-    animationFrameId = requestAnimationFrame(step);
-  } else {
-    stopScroll();
-  }
-}
-
-function stopScroll() {
-  isPlaying = false;
-  btnPlay.textContent = '▶ Leer';
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId);
-    animationFrameId = null;
-  }
-}
-
-function resetScroll() {
-  stopScroll();
-  prompterDisplay.scrollTop = 0;
-}
-
-// DETERMINAR FORMATO COMPATIBLE CON IOS / ANDROID
-function getSupportedMimeType() {
-  const types = [
-    'video/mp4;codecs=h264,aac',
-    'video/mp4',
-    'video/webm;codecs=h264',
-    'video/webm'
-  ];
-  for (let type of types) {
-    if (MediaRecorder.isTypeSupported(type)) return type;
-  }
-  return '';
-}
-
-// GRABACIÓN
-btnRecord.addEventListener('click', startRecording);
-btnStopRec.addEventListener('click', stopRecording);
-
-function startRecording() {
-  if (!mediaStream) return;
-  recordedChunks = [];
-  isRecording = true;
+// 4. GRABACIÓN DE VIDEO
+btnRecord.addEventListener('click', () => {
+  if (!currentStream) return;
   
-  const mimeType = getSupportedMimeType();
-  const options = mimeType ? { mimeType } : {};
+  recordedChunks = [];
+  let options = { mimeType: 'video/webm;codecs=vp9' };
+  
+  if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+    options = { mimeType: 'video/mp4' };
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+      options = { mimeType: '' };
+    }
+  }
 
   try {
-    mediaRecorder = new MediaRecorder(mediaStream, options);
+    mediaRecorder = new MediaRecorder(currentStream, options);
   } catch (e) {
-    mediaRecorder = new MediaRecorder(mediaStream);
-  }
-
-  mediaRecorder.ondataavailable = (e) => {
-    if (e.data && e.data.size > 0) recordedChunks.push(e.data);
-  };
-
-  mediaRecorder.onstop = processAndSaveVideo;
-  mediaRecorder.start(1000);
-
-  btnRecord.style.display = 'none';
-  btnStopRec.style.display = 'flex';
-}
-
-function stopRecording() {
-  if (!mediaRecorder) return;
-  isRecording = false;
-  mediaRecorder.stop();
-  btnRecord.style.display = 'flex';
-  btnStopRec.style.display = 'none';
-}
-
-// CAPTURA DE MINIATURA MEDIANTE CANVAS (COMPATIBILIDAD 100% IOS / SAFARI)
-async function processAndSaveVideo() {
-  const mimeType = mediaRecorder.mimeType || 'video/mp4';
-  const isMp4 = mimeType.includes('mp4');
-  const ext = isMp4 ? 'mp4' : 'webm';
-  
-  const blob = new Blob(recordedChunks, { type: mimeType });
-  const videoUrl = URL.createObjectURL(blob);
-
-  // Generar foto miniatura desde la cámara actual mediante Canvas
-  const canvas = document.createElement('canvas');
-  canvas.width = video.videoWidth || 640;
-  canvas.height = video.videoHeight || 360;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  const thumbnailUrl = canvas.toDataURL('image/jpeg', 0.7);
-
-  const videoItem = {
-    id: Date.now(),
-    url: videoUrl,
-    thumb: thumbnailUrl,
-    date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    ext: ext
-  };
-  
-  dbVideos.unshift(videoItem);
-  videoCount.textContent = dbVideos.length;
-}
-
-// RENDRERIZADO DE GALERÍA DE MINIATURAS
-function renderGallery() {
-  galleryGrid.innerHTML = '';
-  if (dbVideos.length === 0) {
-    galleryGrid.appendChild(emptyGalleryMsg);
+    console.error('Exception while creating MediaRecorder:', e);
     return;
   }
 
-  dbVideos.forEach(item => {
+  mediaRecorder.ondataavailable = (event) => {
+    if (event.data && event.data.size > 0) {
+      recordedChunks.push(event.data);
+    }
+  };
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || 'video/mp4' });
+    const now = new Date();
+    recordedVideos.push({
+      blob: blob,
+      date: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + now.toLocaleDateString()
+    });
+    renderGallery();
+  };
+
+  mediaRecorder.start();
+  btnRecord.style.display = 'none';
+  btnStopRec.style.display = 'flex';
+  startPrompter();
+});
+
+btnStopRec.addEventListener('click', () => {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  btnStopRec.style.display = 'none';
+  btnRecord.style.display = 'flex';
+  stopPrompter();
+});
+
+// 5. GALERÍA Y MODAL COMPATIBLE CON IOS / ANDROID
+function renderGallery() {
+  const galleryGrid = document.getElementById('galleryGrid');
+  const videoCount = document.getElementById('videoCount');
+  
+  if (!galleryGrid) return;
+  
+  galleryGrid.innerHTML = '';
+  if (videoCount) videoCount.textContent = recordedVideos.length;
+
+  if (recordedVideos.length === 0) {
+    galleryGrid.innerHTML = '<p id="emptyGalleryMsg">No hay videos grabados aún.</p>';
+    return;
+  }
+
+  recordedVideos.forEach((item, index) => {
+    const videoBlobUrl = URL.createObjectURL(item.blob);
+
     const card = document.createElement('div');
     card.className = 'video-card';
     card.innerHTML = `
-      <div class="thumb-wrapper" onclick="playVideoModal('${item.url}')">
-        <img src="${item.thumb}" class="thumb-img" alt="Miniatura">
+      <div class="thumb-wrapper" onclick="openVideoModal('${videoBlobUrl}')">
+        <video src="${videoBlobUrl}#t=0.1" preload="metadata" playsinline webkit-playsinline class="thumb-img"></video>
         <div class="play-overlay">▶</div>
       </div>
       <div class="card-info">
-        <small>${item.date} (${item.ext.toUpperCase()})</small>
+        <small>${item.date}</small>
         <div class="card-actions">
-          <button class="btn-download" onclick="downloadVideo(${item.id})">💾 Guardar</button>
-          <button class="btn-delete" onclick="deleteVideo(${item.id})">🗑 Borrar</button>
+          <button class="btn-download" onclick="downloadVideo('${videoBlobUrl}', 'grabacion_${index + 1}.mp4')">💾 Guardar</button>
+          <button class="btn-delete" onclick="deleteVideo(${index})">🗑️ Borrar</button>
         </div>
       </div>
     `;
@@ -272,45 +229,63 @@ function renderGallery() {
   });
 }
 
-// MODAL DE REPRODUCCIÓN
-const videoModal = document.getElementById('videoModal');
-const modalVideoPlayer = document.getElementById('modalVideoPlayer');
-const btnCloseModal = document.getElementById('btnCloseModal');
-
-window.playVideoModal = function(url) {
+window.openVideoModal = function(url) {
   if (videoModal && modalVideoPlayer) {
     modalVideoPlayer.src = url;
     videoModal.style.display = 'flex';
-    modalVideoPlayer.play().catch(() => {});
+    
+    const playPromise = modalVideoPlayer.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(error => {
+        console.log("Autoplay prevenido por el navegador:", error);
+      });
+    }
   }
 };
 
-function closeModal() {
+window.closeModal = function() {
   if (videoModal && modalVideoPlayer) {
     modalVideoPlayer.pause();
-    modalVideoPlayer.src = '';
+    modalVideoPlayer.removeAttribute('src');
+    modalVideoPlayer.load();
     videoModal.style.display = 'none';
   }
-}
+};
 
-btnCloseModal.addEventListener('click', closeModal);
+window.downloadVideo = function(url, filename) {
+  const a = document.createElement('a');
+  a.style.display = 'none';
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  
+  setTimeout(() => {
+    document.body.removeChild(a);
+  }, 100);
+};
 
-// Cerrar también si se toca el fondo fuera del video
-videoModal.addEventListener('click', (e) => {
-  if (e.target === videoModal) {
-    closeModal();
+window.deleteVideo = function(index) {
+  recordedVideos.splice(index, 1);
+  renderGallery();
+};
+
+// Eventos de inicialización
+document.addEventListener('DOMContentLoaded', () => {
+  if (btnCloseModal) {
+    btnCloseModal.addEventListener('click', window.closeModal);
+  }
+
+  if (videoModal) {
+    videoModal.addEventListener('click', (e) => {
+      if (e.target === videoModal) {
+        window.closeModal();
+      }
+    });
+  }
+  
+  // Ajuste inicial del tamaño de letra
+  if (fontSizeInput && prompterText) {
+    prompterText.style.fontSize = `${fontSizeInput.value}px`;
   }
 });
-
-// TECLADO
-document.addEventListener('keydown', (e) => {
-  if (e.code === 'Space' && document.activeElement !== textInput && secPrompter.style.display !== 'none') {
-    e.preventDefault();
-    togglePlay();
-  }
-});
-
-// SERVICE WORKER
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js');
-}
