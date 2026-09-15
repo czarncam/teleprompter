@@ -30,13 +30,28 @@ const videoCount = document.getElementById('videoCount');
 let isPlaying = false;
 let animationFrameId = null;
 let lastTimeStamp = 0;
-let mediaStream = null;
+let rawCameraStream = null;
+let recordStream = null;
 let mediaRecorder = null;
 let recordedChunks = [];
 let dbVideos = [];
 let selectedMimeType = '';
 let currentFacingMode = 'user';
 let isRecording = false;
+
+// CANVAS DE DIBUJO PARA GRABACIÓN CONTINUA
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d');
+let canvasAnimId = null;
+
+function renderCanvas() {
+  if (video.videoWidth > 0 && video.videoHeight > 0) {
+    if (canvas.width !== video.videoWidth) canvas.width = video.videoWidth;
+    if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  }
+  canvasAnimId = requestAnimationFrame(renderCanvas);
+}
 
 // INICIALIZACIÓN
 navEditor.addEventListener('click', () => switchSection('editor'));
@@ -67,12 +82,11 @@ function switchSection(target) {
   }
 }
 
-// CÁMARA INICIALIZACIÓN
+// CÁMARA
 async function startCamera() {
-  stopCamera();
+  stopCameraTracks();
   try {
-    // Eliminamos 'exact' en la inicialización para mayor compatibilidad con dispositivos Android/iOS
-    mediaStream = await navigator.mediaDevices.getUserMedia({
+    rawCameraStream = await navigator.mediaDevices.getUserMedia({
       video: { 
         facingMode: currentFacingMode,
         width: { ideal: 1280 }, 
@@ -81,86 +95,62 @@ async function startCamera() {
       audio: true
     });
 
-    if (video && mediaStream) {
-      video.srcObject = mediaStream;
+    if (video && rawCameraStream) {
+      video.srcObject = rawCameraStream;
       video.setAttribute('playsinline', 'true');
       video.setAttribute('webkit-playsinline', 'true');
       video.muted = true;
       await video.play();
+      
+      if (!canvasAnimId) renderCanvas();
     }
   } catch (err) {
     console.error('Error al acceder a la cámara: ', err);
-    // Fallback general si falla la configuración específica
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      if (video && mediaStream) {
-        video.srcObject = mediaStream;
-        await video.play();
-      }
-    } catch (e) {
-      console.error('Error fatal al acceder a cualquier cámara: ', e);
-    }
+  }
+}
+
+function stopCameraTracks() {
+  if (rawCameraStream) {
+    rawCameraStream.getTracks().forEach(track => track.stop());
+    rawCameraStream = null;
   }
 }
 
 function stopCamera() {
-  if (mediaStream && !isRecording) {
-    mediaStream.getTracks().forEach(track => track.stop());
-    mediaStream = null;
+  if (!isRecording) {
+    stopCameraTracks();
     if (video) video.srcObject = null;
+    if (canvasAnimId) {
+      cancelAnimationFrame(canvasAnimId);
+      canvasAnimId = null;
+    }
   }
 }
 
-// CAMBIO DE CÁMARA COMPATIBLE EN TIEMPO REAL (IOS Y ANDROID)
+// CAMBIO DE CÁMARA FLUIDO SIN DETENER GRABACIÓN
 btnSwitchCam.addEventListener('click', async () => {
   currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
 
-  if (isRecording && mediaRecorder && mediaStream) {
-    try {
-      // 1. Pausar la grabación para prevenir la corrupción del archivo en iOS/Android
-      let isPausedBySwitch = false;
-      if (mediaRecorder.state === 'recording') {
-        mediaRecorder.pause();
-        isPausedBySwitch = true;
-      }
+  // Solo reiniciamos la captura de hardware, el stream del Canvas permanece intacto
+  stopCameraTracks();
 
-      // 2. Intentar solicitar la nueva cámara
-      let newStream;
-      try {
-        newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { exact: currentFacingMode } },
-          audio: false
-        });
-      } catch (e) {
-        // Fallback sin 'exact' en caso de no soportar la restricción estricta
-        newStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: currentFacingMode },
-          audio: false
-        });
-      }
+  try {
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video: { 
+        facingMode: currentFacingMode,
+        width: { ideal: 1280 }, 
+        height: { ideal: 720 } 
+      },
+      audio: true
+    });
 
-      const newVideoTrack = newStream.getVideoTracks()[0];
-      const oldVideoTrack = mediaStream.getVideoTracks()[0];
-
-      // 3. Reemplazar pista de video sin detener el stream principal ni la grabación
-      mediaStream.removeTrack(oldVideoTrack);
-      oldVideoTrack.stop();
-      mediaStream.addTrack(newVideoTrack);
-
-      if (video) video.srcObject = mediaStream;
-
-      // 4. Pausa de 500ms para estabilizar la autoexposición y balance de blancos antes de reanudar
-      setTimeout(() => {
-        if (mediaRecorder && mediaRecorder.state === 'paused' && isPausedBySwitch) {
-          mediaRecorder.resume();
-        }
-      }, 500);
-
-    } catch (err) {
-      console.error('Error al cambiar de cámara en caliente: ', err);
+    rawCameraStream = newStream;
+    if (video) {
+      video.srcObject = rawCameraStream;
+      await video.play();
     }
-  } else {
-    await startCamera();
+  } catch (err) {
+    console.error('Error al cambiar de cámara: ', err);
   }
 });
 
@@ -227,23 +217,33 @@ function getSupportedMimeType() {
   return '';
 }
 
-// GRABACIÓN CONTINUA
+// GRABACIÓN CONTINUA VIA CANVAS + AUDIO
 btnRecord.addEventListener('click', startRecording);
 btnPauseRec.addEventListener('click', pauseRecording);
 btnStopRec.addEventListener('click', stopRecording);
 
 function startRecording() {
-  if (!mediaStream) return;
+  if (!rawCameraStream) return;
   recordedChunks = [];
   isRecording = true;
-  
+
+  // 1. Extraer stream continuo del Canvas a 30 FPS
+  const canvasStream = canvas.captureStream(30);
+
+  // 2. Extraer audio de la cámara e integrarlo al Stream de grabación
+  const audioTrack = rawCameraStream.getAudioTracks()[0];
+  if (audioTrack) {
+    canvasStream.addTrack(audioTrack);
+  }
+
+  recordStream = canvasStream;
   selectedMimeType = getSupportedMimeType();
   const options = selectedMimeType ? { mimeType: selectedMimeType } : {};
 
   try {
-    mediaRecorder = new MediaRecorder(mediaStream, options);
+    mediaRecorder = new MediaRecorder(recordStream, options);
   } catch (e) {
-    mediaRecorder = new MediaRecorder(mediaStream);
+    mediaRecorder = new MediaRecorder(recordStream);
   }
 
   mediaRecorder.ondataavailable = (e) => {
@@ -309,8 +309,10 @@ function renderGallery() {
   dbVideos.forEach(item => {
     const card = document.createElement('div');
     card.className = 'video-card';
+    
+    // Agregamos evento onloadeddata="this.currentTime=0.1" para cargar la miniatura inmediatamente
     card.innerHTML = `
-      <video src="${item.url}" controls playsinline webkit-playsinline preload="metadata"></video>
+      <video src="${item.url}#t=0.1" controls playsinline webkit-playsinline preload="metadata" onloadeddata="this.currentTime=0.1"></video>
       <small>${item.date} (${item.ext.toUpperCase()})</small>
       <div class="card-actions">
         <button class="btn-download" onclick="downloadVideo(${item.id})">💾 Guardar</button>
