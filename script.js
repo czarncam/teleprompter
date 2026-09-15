@@ -71,24 +71,29 @@ btnGoToPrompter.addEventListener('click', () => {
   showSection(sectionPrompter, navPrompter);
 });
 
-// 2. CONTROL DE CÁMARA Y ZOOM (0.5x / 1x)
+// 2. CONTROL DE CÁMARA OPTIMIZADO PARA IOS/ANDROID
 async function startCamera() {
   stopCamera();
   
+  // Limitar a 720p a 30fps evita sobrecargar el codificador de video en Safari
   const constraints = {
     video: {
       facingMode: currentFacingMode,
-      width: { ideal: 1920 },
-      height: { ideal: 1080 }
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { max: 30 }
     },
-    audio: true
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true
+    }
   };
 
   try {
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
     cameraPreview.srcObject = currentStream;
 
-    // Ajustar zoom para dispositivos Android/Browsers compatibles con Hardware Zoom
+    // Ajustar zoom para dispositivos Android/Navegadores compatibles
     const videoTrack = currentStream.getVideoTracks()[0];
     if (videoTrack && videoTrack.getCapabilities) {
       const capabilities = videoTrack.getCapabilities();
@@ -165,7 +170,7 @@ btnMirror.addEventListener('click', () => {
   prompterText.classList.toggle('mirror');
 });
 
-// 4. GRABACIÓN DE VIDEO COMPATIBLE CON IOS Y ANDROID
+// 4. GRABACIÓN DE VIDEO ESTABILIZADA PARA IOS Y ANDROID
 function getSupportedMimeType() {
   const types = [
     'video/mp4;codecs=avc1',
@@ -186,13 +191,23 @@ btnRecord.addEventListener('click', () => {
   
   recordedChunks = [];
   const mimeType = getSupportedMimeType();
-  const options = mimeType ? { mimeType } : {};
+
+  // Control explícito de bitrate para evitar congelamientos en iOS Safari
+  const options = {
+    mimeType: mimeType || undefined,
+    videoBitsPerSecond: 2500000 // 2.5 Mbps constante
+  };
 
   try {
     mediaRecorder = new MediaRecorder(currentStream, options);
   } catch (e) {
-    console.error('Error al inicializar MediaRecorder:', e);
-    return;
+    console.error('Error al inicializar MediaRecorder con bitrate, reintentando modo por defecto:', e);
+    try {
+      mediaRecorder = new MediaRecorder(currentStream);
+    } catch (err) {
+      console.error('Error crítico al iniciar MediaRecorder:', err);
+      return;
+    }
   }
 
   mediaRecorder.ondataavailable = (event) => {
@@ -216,7 +231,8 @@ btnRecord.addEventListener('click', () => {
     renderGallery();
   };
 
-  mediaRecorder.start();
+  // Fragmentar los datos cada 1000ms mantiene el búfer de Safari fluido durante grabaciones largas
+  mediaRecorder.start(1000);
   btnRecord.style.display = 'none';
   btnStopRec.style.display = 'flex';
   startPrompter();
@@ -316,7 +332,7 @@ window.deleteVideo = function(index) {
   renderGallery();
 };
 
-// INICIALIZACIÓN
+// INICIALIZACIÓN DE EVENTOS
 document.addEventListener('DOMContentLoaded', () => {
   if (btnCloseModal) {
     btnCloseModal.addEventListener('click', window.closeModal);
