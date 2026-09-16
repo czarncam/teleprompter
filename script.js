@@ -226,9 +226,14 @@ function startPrompter() {
   btnPlay.textContent = '⏸ Pausa';
 
   const speed = parseFloat(speedInput.value) || 1;
+
   prompterInterval = setInterval(() => {
-    prompterDisplay.scrollTop += speed;
-  }, 20);
+    if (prompterDisplay) {
+      // Método con fallback para forzar desplazamiento en WebKit
+      prompterDisplay.scrollTop += speed;
+      prompterDisplay.scrollBy({ top: speed, behavior: 'instant' });
+    }
+  }, 25);
 }
 
 function stopPrompter() {
@@ -252,24 +257,12 @@ btnMirror.addEventListener('click', () => {
   prompterText.classList.toggle('mirror');
 });
 
-// 4. GRABACIÓN DE VIDEO CON PERSISTENCIA LOCAL
-function getSupportedMimeType() {
-  const types = [
-    'video/mp4;codecs=avc1',
-    'video/mp4',
-    'video/webm;codecs=vp8,opus',
-    'video/webm'
-  ];
-  for (let type of types) {
-    if (MediaRecorder.isTypeSupported(type)) {
-      return type;
-    }
-  }
-  return '';
-}
-
-btnRecord.addEventListener('click', () => {
+// 4. GRABACIÓN DE VIDEO OPTIMIZADA PARA IOS SAFARI
+btnRecord.addEventListener('click', async () => {
   if (!currentStream) return;
+
+  // Reactivar pistas de audio para evitar el bloqueo de WebKit
+  currentStream.getAudioTracks().forEach(track => { track.enabled = true; });
   
   recordedChunks = [];
   const mimeType = getSupportedMimeType();
@@ -285,6 +278,7 @@ btnRecord.addEventListener('click', () => {
     try {
       mediaRecorder = new MediaRecorder(currentStream);
     } catch (err) {
+      console.error('Error crítico en MediaRecorder:', err);
       return;
     }
   }
@@ -296,6 +290,11 @@ btnRecord.addEventListener('click', () => {
   };
 
   mediaRecorder.onstop = () => {
+    if (recordedChunks.length === 0) {
+      console.warn("Safari no generó fragmentos de grabación.");
+      return;
+    }
+
     const finalMime = mediaRecorder.mimeType || 'video/mp4';
     const blob = new Blob(recordedChunks, { type: finalMime });
     const now = new Date();
@@ -304,19 +303,16 @@ btnRecord.addEventListener('click', () => {
     saveVideoToDB(blob, dateStr);
   };
 
-  mediaRecorder.start(1000);
+  // En iOS Safari, iniciar sin timeslice forzado garantiza la captura del header MP4 completo
+  try {
+    mediaRecorder.start(1000);
+  } catch (err) {
+    mediaRecorder.start();
+  }
+
   btnRecord.style.display = 'none';
   btnStopRec.style.display = 'flex';
   startPrompter();
-});
-
-btnStopRec.addEventListener('click', () => {
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop();
-  }
-  btnStopRec.style.display = 'none';
-  btnRecord.style.display = 'flex';
-  stopPrompter();
 });
 
 // 5. GALERÍA Y MODAL DE REPRODUCCIÓN
