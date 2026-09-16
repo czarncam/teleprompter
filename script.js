@@ -45,7 +45,7 @@ const videoModal = document.getElementById('videoModal');
 const modalVideoPlayer = document.getElementById('modalVideoPlayer');
 const btnCloseModal = document.getElementById('btnCloseModal');
 
-// 0. INICIALIZACIÓN DE INDEXEDDB (Base de datos local persistente)
+// 0. INICIALIZACIÓN DE INDEXEDDB
 function initDB() {
   const request = indexedDB.open('TeleprompterDB', 1);
 
@@ -136,26 +136,27 @@ function showSection(sectionToShow, activeBtn) {
   }
 }
 
-// Eventos de Navegación de la Barra Superior
+// Eventos Navegación
 if (navHome) navHome.addEventListener('click', () => showSection(sectionHome, null));
-navEditor.addEventListener('click', () => showSection(sectionEditor, navEditor));
-navPrompter.addEventListener('click', () => showSection(sectionPrompter, navPrompter));
-navGallery.addEventListener('click', () => showSection(sectionGallery, navGallery));
+if (navEditor) navEditor.addEventListener('click', () => showSection(sectionEditor, navEditor));
+if (navPrompter) navPrompter.addEventListener('click', () => showSection(sectionPrompter, navPrompter));
+if (navGallery) navGallery.addEventListener('click', () => showSection(sectionGallery, navGallery));
 
-// Eventos de Navegación desde los Botones de la Home
 if (btnHomeEditor) btnHomeEditor.addEventListener('click', () => showSection(sectionEditor, navEditor));
 if (btnHomePrompter) btnHomePrompter.addEventListener('click', () => {
-  prompterText.textContent = textInput.value || 'Escribe tu guion en el editor...';
+  if (prompterText) prompterText.textContent = textInput.value || 'Escribe tu guion en el editor...';
   showSection(sectionPrompter, navPrompter);
 });
 if (btnHomeGallery) btnHomeGallery.addEventListener('click', () => showSection(sectionGallery, navGallery));
 
-btnGoToPrompter.addEventListener('click', () => {
-  prompterText.textContent = textInput.value || 'Escribe tu guion en el editor...';
-  showSection(sectionPrompter, navPrompter);
-});
+if (btnGoToPrompter) {
+  btnGoToPrompter.addEventListener('click', () => {
+    if (prompterText) prompterText.textContent = textInput.value || 'Escribe tu guion en el editor...';
+    showSection(sectionPrompter, navPrompter);
+  });
+}
 
-// 2. CONTROL DE CÁMARA Y ZOOM
+// 2. CONTROL DE CÁMARA
 async function startCamera() {
   stopCamera();
   
@@ -163,18 +164,14 @@ async function startCamera() {
     video: {
       facingMode: currentFacingMode,
       width: { ideal: 1280 },
-      height: { ideal: 720 },
-      frameRate: { max: 30 }
+      height: { ideal: 720 }
     },
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true
-    }
+    audio: true
   };
 
   try {
     currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-    cameraPreview.srcObject = currentStream;
+    if (cameraPreview) cameraPreview.srcObject = currentStream;
 
     const videoTrack = currentStream.getVideoTracks()[0];
     if (videoTrack && videoTrack.getCapabilities) {
@@ -198,10 +195,12 @@ function stopCamera() {
   }
 }
 
-btnSwitchCam.addEventListener('click', () => {
-  currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-  startCamera();
-});
+if (btnSwitchCam) {
+  btnSwitchCam.addEventListener('click', () => {
+    currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+    startCamera();
+  });
+}
 
 if (btnZoom) {
   btnZoom.addEventListener('click', () => {
@@ -223,17 +222,14 @@ function togglePrompter() {
 function startPrompter() {
   if (isPrompterRunning) return;
   isPrompterRunning = true;
-  btnPlay.textContent = '⏸ Pausa';
+  if (btnPlay) btnPlay.textContent = '⏸ Pausa';
 
   const speed = parseFloat(speedInput.value) || 1;
-
   prompterInterval = setInterval(() => {
     if (prompterDisplay) {
-      // Método con fallback para forzar desplazamiento en WebKit
       prompterDisplay.scrollTop += speed;
-      prompterDisplay.scrollBy({ top: speed, behavior: 'instant' });
     }
-  }, 25);
+  }, 30);
 }
 
 function stopPrompter() {
@@ -245,77 +241,88 @@ function stopPrompter() {
   }
 }
 
-btnPlay.addEventListener('click', togglePrompter);
-btnReset.addEventListener('click', () => {
-  stopPrompter();
-  prompterDisplay.scrollTop = 0;
-});
-fontSizeInput.addEventListener('input', (e) => {
-  prompterText.style.fontSize = `${e.target.value}px`;
-});
-btnMirror.addEventListener('click', () => {
-  prompterText.classList.toggle('mirror');
-});
+if (btnPlay) btnPlay.addEventListener('click', togglePrompter);
+if (btnReset) {
+  btnReset.addEventListener('click', () => {
+    stopPrompter();
+    if (prompterDisplay) prompterDisplay.scrollTop = 0;
+  });
+}
+if (fontSizeInput && prompterText) {
+  fontSizeInput.addEventListener('input', (e) => {
+    prompterText.style.fontSize = `${e.target.value}px`;
+  });
+}
+if (btnMirror && prompterText) {
+  btnMirror.addEventListener('click', () => {
+    prompterText.classList.toggle('mirror');
+  });
+}
 
-// 4. GRABACIÓN DE VIDEO OPTIMIZADA PARA IOS SAFARI
-btnRecord.addEventListener('click', async () => {
-  if (!currentStream) return;
-
-  // Reactivar pistas de audio para evitar el bloqueo de WebKit
-  currentStream.getAudioTracks().forEach(track => { track.enabled = true; });
-  
-  recordedChunks = [];
-  const mimeType = getSupportedMimeType();
-
-  const options = {
-    mimeType: mimeType || undefined,
-    videoBitsPerSecond: 2500000 
-  };
-
-  try {
-    mediaRecorder = new MediaRecorder(currentStream, options);
-  } catch (e) {
-    try {
-      mediaRecorder = new MediaRecorder(currentStream);
-    } catch (err) {
-      console.error('Error crítico en MediaRecorder:', err);
-      return;
+// 4. GRABACIÓN DE VIDEO UNIFICADA (iOS y Android)
+function getSupportedMimeType() {
+  const types = [
+    'video/mp4;codecs=avc1',
+    'video/mp4',
+    'video/webm;codecs=vp8,opus',
+    'video/webm'
+  ];
+  for (let type of types) {
+    if (MediaRecorder.isTypeSupported(type)) {
+      return type;
     }
   }
+  return '';
+}
 
-  mediaRecorder.ondataavailable = (event) => {
-    if (event.data && event.data.size > 0) {
-      recordedChunks.push(event.data);
-    }
-  };
-
-  mediaRecorder.onstop = () => {
-    if (recordedChunks.length === 0) {
-      console.warn("Safari no generó fragmentos de grabación.");
-      return;
-    }
-
-    const finalMime = mediaRecorder.mimeType || 'video/mp4';
-    const blob = new Blob(recordedChunks, { type: finalMime });
-    const now = new Date();
-    const dateStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + now.toLocaleDateString();
+if (btnRecord) {
+  btnRecord.addEventListener('click', () => {
+    if (!currentStream) return;
     
-    saveVideoToDB(blob, dateStr);
-  };
+    recordedChunks = [];
+    const mimeType = getSupportedMimeType();
 
-  // En iOS Safari, iniciar sin timeslice forzado garantiza la captura del header MP4 completo
-  try {
-    mediaRecorder.start(1000);
-  } catch (err) {
-    mediaRecorder.start();
-  }
+    try {
+      mediaRecorder = new MediaRecorder(currentStream, mimeType ? { mimeType } : undefined);
+    } catch (e) {
+      mediaRecorder = new MediaRecorder(currentStream);
+    }
 
-  btnRecord.style.display = 'none';
-  btnStopRec.style.display = 'flex';
-  startPrompter();
-});
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    };
 
-// 5. GALERÍA Y MODAL DE REPRODUCCIÓN
+    mediaRecorder.onstop = () => {
+      if (recordedChunks.length === 0) return;
+      const finalMime = mediaRecorder.mimeType || 'video/mp4';
+      const blob = new Blob(recordedChunks, { type: finalMime });
+      const now = new Date();
+      const dateStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + now.toLocaleDateString();
+      
+      saveVideoToDB(blob, dateStr);
+    };
+
+    mediaRecorder.start(100); 
+    btnRecord.style.display = 'none';
+    if (btnStopRec) btnStopRec.style.display = 'flex';
+    startPrompter();
+  });
+}
+
+if (btnStopRec) {
+  btnStopRec.addEventListener('click', () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+    btnStopRec.style.display = 'none';
+    if (btnRecord) btnRecord.style.display = 'flex';
+    stopPrompter();
+  });
+}
+
+// 5. GALERÍA Y MODAL
 function renderGallery() {
   const galleryGrid = document.getElementById('galleryGrid');
   const videoCount = document.getElementById('videoCount');
