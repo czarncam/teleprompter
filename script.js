@@ -1,4 +1,4 @@
-// Estado global de la aplicación
+// Estado global
 let recordedVideos = []; 
 let mediaRecorder = null;
 let recordedChunks = [];
@@ -9,43 +9,16 @@ let currentFacingMode = 'user';
 let isWideAngle = false;
 let db = null;
 
-// Elementos del DOM
-const navHome = document.getElementById('navHome');
-const navEditor = document.getElementById('navEditor');
-const navPrompter = document.getElementById('navPrompter');
-const navGallery = document.getElementById('navGallery');
+// Referencias DOM
+let navHome, navEditor, navPrompter, navGallery;
+let sectionHome, sectionEditor, sectionPrompter, sectionGallery;
+let btnHomeEditor, btnHomePrompter, btnHomeGallery;
+let textInput, btnGoToPrompter, prompterDisplay, prompterText, cameraPreview;
+let speedInput, fontSizeInput, btnMirror;
+let btnReset, btnPlay, btnRecord, btnStopRec, btnSwitchCam, btnZoom;
+let videoModal, modalVideoPlayer, btnCloseModal;
 
-const sectionHome = document.getElementById('section-home');
-const sectionEditor = document.getElementById('section-editor');
-const sectionPrompter = document.getElementById('section-prompter');
-const sectionGallery = document.getElementById('section-gallery');
-
-const btnHomeEditor = document.getElementById('btnHomeEditor');
-const btnHomePrompter = document.getElementById('btnHomePrompter');
-const btnHomeGallery = document.getElementById('btnHomeGallery');
-
-const textInput = document.getElementById('textInput');
-const btnGoToPrompter = document.getElementById('btnGoToPrompter');
-const prompterDisplay = document.getElementById('prompter-display');
-const prompterText = document.getElementById('prompter-text');
-const cameraPreview = document.getElementById('cameraPreview');
-
-const speedInput = document.getElementById('speed');
-const fontSizeInput = document.getElementById('fontSize');
-const btnMirror = document.getElementById('btnMirror');
-
-const btnReset = document.getElementById('btnReset');
-const btnPlay = document.getElementById('btnPlay');
-const btnRecord = document.getElementById('btnRecord');
-const btnStopRec = document.getElementById('btnStopRec');
-const btnSwitchCam = document.getElementById('btnSwitchCam');
-const btnZoom = document.getElementById('btnZoom');
-
-const videoModal = document.getElementById('videoModal');
-const modalVideoPlayer = document.getElementById('modalVideoPlayer');
-const btnCloseModal = document.getElementById('btnCloseModal');
-
-// 0. INICIALIZACIÓN DE INDEXEDDB
+// Inicialización de DB
 function initDB() {
   const request = indexedDB.open('TeleprompterDB', 1);
 
@@ -73,9 +46,7 @@ function saveVideoToDB(blob, dateString) {
   const videoRecord = { blob: blob, date: dateString };
   
   const request = store.add(videoRecord);
-  request.onsuccess = () => {
-    loadVideosFromDB();
-  };
+  request.onsuccess = () => loadVideosFromDB();
 }
 
 function loadVideosFromDB() {
@@ -106,13 +77,10 @@ function deleteVideoFromDB(id) {
   const transaction = db.transaction(['videos'], 'readwrite');
   const store = transaction.objectStore('videos');
   store.delete(id);
-  
-  transaction.oncomplete = () => {
-    loadVideosFromDB();
-  };
+  transaction.oncomplete = () => loadVideosFromDB();
 }
 
-// 1. NAVEGACIÓN ENTRE SECCIONES
+// Navegación
 function showSection(sectionToShow, activeBtn) {
   [sectionHome, sectionEditor, sectionPrompter, sectionGallery].forEach(sec => {
     if (sec) sec.style.display = 'none';
@@ -136,27 +104,7 @@ function showSection(sectionToShow, activeBtn) {
   }
 }
 
-// Eventos Navegación
-if (navHome) navHome.addEventListener('click', () => showSection(sectionHome, null));
-if (navEditor) navEditor.addEventListener('click', () => showSection(sectionEditor, navEditor));
-if (navPrompter) navPrompter.addEventListener('click', () => showSection(sectionPrompter, navPrompter));
-if (navGallery) navGallery.addEventListener('click', () => showSection(sectionGallery, navGallery));
-
-if (btnHomeEditor) btnHomeEditor.addEventListener('click', () => showSection(sectionEditor, navEditor));
-if (btnHomePrompter) btnHomePrompter.addEventListener('click', () => {
-  if (prompterText) prompterText.textContent = textInput.value || 'Escribe tu guion en el editor...';
-  showSection(sectionPrompter, navPrompter);
-});
-if (btnHomeGallery) btnHomeGallery.addEventListener('click', () => showSection(sectionGallery, navGallery));
-
-if (btnGoToPrompter) {
-  btnGoToPrompter.addEventListener('click', () => {
-    if (prompterText) prompterText.textContent = textInput.value || 'Escribe tu guion en el editor...';
-    showSection(sectionPrompter, navPrompter);
-  });
-}
-
-// 2. CONTROL DE CÁMARA
+// Control de cámara
 async function startCamera() {
   stopCamera();
   
@@ -195,22 +143,7 @@ function stopCamera() {
   }
 }
 
-if (btnSwitchCam) {
-  btnSwitchCam.addEventListener('click', () => {
-    currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-    startCamera();
-  });
-}
-
-if (btnZoom) {
-  btnZoom.addEventListener('click', () => {
-    isWideAngle = !isWideAngle;
-    btnZoom.textContent = isWideAngle ? "🔍 1x" : "🔍 0.5x";
-    startCamera();
-  });
-}
-
-// 3. TELEPROMPTER
+// Teleprompter
 function togglePrompter() {
   if (isPrompterRunning) {
     stopPrompter();
@@ -229,7 +162,7 @@ function startPrompter() {
     if (prompterDisplay) {
       prompterDisplay.scrollTop += speed;
     }
-  }, 30);
+  }, 25);
 }
 
 function stopPrompter() {
@@ -241,25 +174,7 @@ function stopPrompter() {
   }
 }
 
-if (btnPlay) btnPlay.addEventListener('click', togglePrompter);
-if (btnReset) {
-  btnReset.addEventListener('click', () => {
-    stopPrompter();
-    if (prompterDisplay) prompterDisplay.scrollTop = 0;
-  });
-}
-if (fontSizeInput && prompterText) {
-  fontSizeInput.addEventListener('input', (e) => {
-    prompterText.style.fontSize = `${e.target.value}px`;
-  });
-}
-if (btnMirror && prompterText) {
-  btnMirror.addEventListener('click', () => {
-    prompterText.classList.toggle('mirror');
-  });
-}
-
-// 4. GRABACIÓN DE VIDEO UNIFICADA (iOS y Android)
+// Grabación
 function getSupportedMimeType() {
   const types = [
     'video/mp4;codecs=avc1',
@@ -268,61 +183,62 @@ function getSupportedMimeType() {
     'video/webm'
   ];
   for (let type of types) {
-    if (MediaRecorder.isTypeSupported(type)) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) {
       return type;
     }
   }
   return '';
 }
 
-if (btnRecord) {
-  btnRecord.addEventListener('click', () => {
-    if (!currentStream) return;
-    
-    recordedChunks = [];
-    const mimeType = getSupportedMimeType();
+function startRecording() {
+  if (!currentStream) return;
+  
+  recordedChunks = [];
+  const mimeType = getSupportedMimeType();
 
+  try {
+    mediaRecorder = mimeType ? new MediaRecorder(currentStream, { mimeType }) : new MediaRecorder(currentStream);
+  } catch (e) {
     try {
-      mediaRecorder = new MediaRecorder(currentStream, mimeType ? { mimeType } : undefined);
-    } catch (e) {
       mediaRecorder = new MediaRecorder(currentStream);
+    } catch (err) {
+      alert("Tu dispositivo no soporta la grabación en este navegador.");
+      return;
     }
+  }
 
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data && event.data.size > 0) {
-        recordedChunks.push(event.data);
-      }
-    };
+  mediaRecorder.ondataavailable = (event) => {
+    if (event.data && event.data.size > 0) {
+      recordedChunks.push(event.data);
+    }
+  };
 
-    mediaRecorder.onstop = () => {
-      if (recordedChunks.length === 0) return;
-      const finalMime = mediaRecorder.mimeType || 'video/mp4';
-      const blob = new Blob(recordedChunks, { type: finalMime });
-      const now = new Date();
-      const dateStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + now.toLocaleDateString();
-      
-      saveVideoToDB(blob, dateStr);
-    };
+  mediaRecorder.onstop = () => {
+    if (recordedChunks.length === 0) return;
+    const finalMime = mediaRecorder.mimeType || 'video/mp4';
+    const blob = new Blob(recordedChunks, { type: finalMime });
+    const now = new Date();
+    const dateStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + now.toLocaleDateString();
+    
+    saveVideoToDB(blob, dateStr);
+  };
 
-    mediaRecorder.start(100); 
-    btnRecord.style.display = 'none';
-    if (btnStopRec) btnStopRec.style.display = 'flex';
-    startPrompter();
-  });
+  mediaRecorder.start(250); 
+  if (btnRecord) btnRecord.style.display = 'none';
+  if (btnStopRec) btnStopRec.style.display = 'flex';
+  startPrompter();
 }
 
-if (btnStopRec) {
-  btnStopRec.addEventListener('click', () => {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      mediaRecorder.stop();
-    }
-    btnStopRec.style.display = 'none';
-    if (btnRecord) btnRecord.style.display = 'flex';
-    stopPrompter();
-  });
+function stopRecording() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+  }
+  if (btnStopRec) btnStopRec.style.display = 'none';
+  if (btnRecord) btnRecord.style.display = 'flex';
+  stopPrompter();
 }
 
-// 5. GALERÍA Y MODAL
+// Galería y Modal
 function renderGallery() {
   const galleryGrid = document.getElementById('galleryGrid');
   const videoCount = document.getElementById('videoCount');
@@ -341,15 +257,15 @@ function renderGallery() {
     const card = document.createElement('div');
     card.className = 'video-card';
     card.innerHTML = `
-      <div class="thumb-wrapper" onclick="openVideoModal(${index})">
+      <div class="thumb-wrapper" onclick="window.openVideoModal(${index})">
         <video src="${item.url}#t=0.1" preload="metadata" playsinline webkit-playsinline class="thumb-img"></video>
         <div class="play-overlay">▶</div>
       </div>
       <div class="card-info">
         <small>${item.date}</small>
         <div class="card-actions">
-          <button class="btn-download" onclick="downloadVideo(${index})">💾 Guardar</button>
-          <button class="btn-delete" onclick="deleteVideo(${item.id})">🗑️ Borrar</button>
+          <button class="btn-download" onclick="window.downloadVideo(${index})">💾 Guardar</button>
+          <button class="btn-delete" onclick="window.deleteVideo(${item.id})">🗑️ Borrar</button>
         </div>
       </div>
     `;
@@ -364,12 +280,8 @@ window.openVideoModal = function(index) {
   if (videoModal && modalVideoPlayer) {
     modalVideoPlayer.src = item.url;
     videoModal.style.display = 'flex';
-    
     modalVideoPlayer.load();
-    const playPromise = modalVideoPlayer.play();
-    if (playPromise !== undefined) {
-      playPromise.catch(() => {});
-    }
+    modalVideoPlayer.play().catch(() => {});
   }
 };
 
@@ -392,33 +304,118 @@ window.downloadVideo = function(index) {
   a.download = `grabacion_${index + 1}.mp4`;
   document.body.appendChild(a);
   a.click();
-  
-  setTimeout(() => {
-    document.body.removeChild(a);
-  }, 100);
+  setTimeout(() => document.body.removeChild(a), 100);
 };
 
 window.deleteVideo = function(id) {
   deleteVideoFromDB(id);
 };
 
-// INICIALIZACIÓN
+// VINCULACIÓN DE EVENTOS AL CARGAR EL DOM
 document.addEventListener('DOMContentLoaded', () => {
-  initDB();
+  // Inicialización de DOM
+  navHome = document.getElementById('navHome');
+  navEditor = document.getElementById('navEditor');
+  navPrompter = document.getElementById('navPrompter');
+  navGallery = document.getElementById('navGallery');
 
-  if (btnCloseModal) {
-    btnCloseModal.addEventListener('click', window.closeModal);
-  }
+  sectionHome = document.getElementById('section-home');
+  sectionEditor = document.getElementById('section-editor');
+  sectionPrompter = document.getElementById('section-prompter');
+  sectionGallery = document.getElementById('section-gallery');
 
-  if (videoModal) {
-    videoModal.addEventListener('click', (e) => {
-      if (e.target === videoModal) {
-        window.closeModal();
-      }
+  btnHomeEditor = document.getElementById('btnHomeEditor');
+  btnHomePrompter = document.getElementById('btnHomePrompter');
+  btnHomeGallery = document.getElementById('btnHomeGallery');
+
+  textInput = document.getElementById('textInput');
+  btnGoToPrompter = document.getElementById('btnGoToPrompter');
+  prompterDisplay = document.getElementById('prompter-display');
+  prompterText = document.getElementById('prompter-text');
+  cameraPreview = document.getElementById('cameraPreview');
+
+  speedInput = document.getElementById('speed');
+  fontSizeInput = document.getElementById('fontSize');
+  btnMirror = document.getElementById('btnMirror');
+
+  btnReset = document.getElementById('btnReset');
+  btnPlay = document.getElementById('btnPlay');
+  btnRecord = document.getElementById('btnRecord');
+  btnStopRec = document.getElementById('btnStopRec');
+  btnSwitchCam = document.getElementById('btnSwitchCam');
+  btnZoom = document.getElementById('btnZoom');
+
+  videoModal = document.getElementById('videoModal');
+  modalVideoPlayer = document.getElementById('modalVideoPlayer');
+  btnCloseModal = document.getElementById('btnCloseModal');
+
+  // Asignar Eventos
+  if (navHome) navHome.addEventListener('click', () => showSection(sectionHome, null));
+  if (navEditor) navEditor.addEventListener('click', () => showSection(sectionEditor, navEditor));
+  if (navPrompter) navPrompter.addEventListener('click', () => showSection(sectionPrompter, navPrompter));
+  if (navGallery) navGallery.addEventListener('click', () => showSection(sectionGallery, navGallery));
+
+  if (btnHomeEditor) btnHomeEditor.addEventListener('click', () => showSection(sectionEditor, navEditor));
+  if (btnHomePrompter) btnHomePrompter.addEventListener('click', () => {
+    if (prompterText) prompterText.textContent = textInput.value || 'Escribe tu guion en el editor...';
+    showSection(sectionPrompter, navPrompter);
+  });
+  if (btnHomeGallery) btnHomeGallery.addEventListener('click', () => showSection(sectionGallery, navGallery));
+
+  if (btnGoToPrompter) {
+    btnGoToPrompter.addEventListener('click', () => {
+      if (prompterText) prompterText.textContent = textInput.value || 'Escribe tu guion en el editor...';
+      showSection(sectionPrompter, navPrompter);
     });
   }
-  
+
+  if (btnSwitchCam) {
+    btnSwitchCam.addEventListener('click', () => {
+      currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+      startCamera();
+    });
+  }
+
+  if (btnZoom) {
+    btnZoom.addEventListener('click', () => {
+      isWideAngle = !isWideAngle;
+      btnZoom.textContent = isWideAngle ? "🔍 1x" : "🔍 0.5x";
+      startCamera();
+    });
+  }
+
+  if (btnPlay) btnPlay.addEventListener('click', togglePrompter);
+  if (btnReset) {
+    btnReset.addEventListener('click', () => {
+      stopPrompter();
+      if (prompterDisplay) prompterDisplay.scrollTop = 0;
+    });
+  }
+
   if (fontSizeInput && prompterText) {
+    fontSizeInput.addEventListener('input', (e) => {
+      prompterText.style.fontSize = `${e.target.value}px`;
+    });
     prompterText.style.fontSize = `${fontSizeInput.value}px`;
   }
+
+  if (btnMirror && prompterText) {
+    btnMirror.addEventListener('click', () => {
+      prompterText.classList.toggle('mirror');
+    });
+  }
+
+  if (btnRecord) btnRecord.addEventListener('click', startRecording);
+  if (btnStopRec) btnStopRec.style.display = 'none';
+  if (btnStopRec) btnStopRec.addEventListener('click', stopRecording);
+
+  if (btnCloseModal) btnCloseModal.addEventListener('click', window.closeModal);
+  if (videoModal) {
+    videoModal.addEventListener('click', (e) => {
+      if (e.target === videoModal) window.closeModal();
+    });
+  }
+
+  // Inicializar DB
+  initDB();
 });
