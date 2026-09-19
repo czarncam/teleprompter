@@ -18,83 +18,109 @@ let speedInput, fontSizeInput, btnMirror;
 let btnReset, btnPlay, btnRecord, btnStopRec, btnSwitchCam, btnZoom;
 let videoModal, modalVideoPlayer, btnCloseModal;
 
-// Inicialización de DB (IndexedDB)
+// Inicialización de IndexedDB
 function initDB() {
-  const request = indexedDB.open('TeleprompterDB', 1);
+  try {
+    const request = indexedDB.open('TeleprompterDB', 2);
 
-  request.onupgradeneeded = (e) => {
-    db = e.target.result;
-    if (!db.objectStoreNames.contains('videos')) {
-      db.createObjectStore('videos', { keyPath: 'id', autoIncrement: true });
-    }
-  };
+    request.onupgradeneeded = (e) => {
+      db = e.target.result;
+      if (!db.objectStoreNames.contains('videos')) {
+        db.createObjectStore('videos', { keyPath: 'id', autoIncrement: true });
+      }
+    };
 
-  request.onsuccess = (e) => {
-    db = e.target.result;
-    loadVideosFromDB();
-  };
+    request.onsuccess = (e) => {
+      db = e.target.result;
+      loadVideosFromDB();
+    };
 
-  request.onerror = (e) => {
-    console.error('Error abriendo IndexedDB:', e);
-  };
+    request.onerror = (e) => {
+      console.warn('IndexedDB no disponible, se usará memoria temporal:', e);
+    };
+  } catch (err) {
+    console.warn('Error inicializando IndexedDB:', err);
+  }
 }
 
-function saveVideoToDB(blob, dateString) {
-  if (!db) {
-    // Si falla IndexedDB, guardar temporalmente en memoria para no perder la grabación
-    const fallbackItem = {
-      id: Date.now(),
-      blob: blob,
-      url: URL.createObjectURL(blob),
-      date: dateString
-    };
-    recordedVideos.push(fallbackItem);
-    renderGallery();
-    return;
-  }
+// Guardar Video (Compatible con iOS Safari / Android Chrome)
+async function saveVideoToDB(blob, dateString) {
+  const videoItem = {
+    id: Date.now(),
+    blob: blob,
+    url: URL.createObjectURL(blob),
+    date: dateString
+  };
 
-  const transaction = db.transaction(['videos'], 'readwrite');
-  const store = transaction.objectStore('videos');
-  const videoRecord = { blob: blob, date: dateString };
-  
-  const request = store.add(videoRecord);
-  request.onsuccess = () => loadVideosFromDB();
-  request.onerror = (e) => console.error("Error guardando el video en DB:", e);
+  // Guardar inmediatamente en memoria local para garantizar visibilidad en la interfaz
+  recordedVideos.unshift(videoItem);
+  renderGallery();
+
+  // Intentar persistir en IndexedDB como ArrayBuffer (Evita cierres silenciosos en iOS Safari)
+  if (db) {
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const transaction = db.transaction(['videos'], 'readwrite');
+      const store = transaction.objectStore('videos');
+      
+      store.add({
+        id: videoItem.id,
+        buffer: arrayBuffer,
+        type: blob.type,
+        date: dateString
+      });
+    } catch (err) {
+      console.warn("No se pudo guardar en IndexedDB permanentemente, el video queda disponible en esta sesión:", err);
+    }
+  }
 }
 
 function loadVideosFromDB() {
   if (!db) return;
-  const transaction = db.transaction(['videos'], 'readonly');
-  const store = transaction.objectStore('videos');
-  const request = store.getAll();
+  try {
+    const transaction = db.transaction(['videos'], 'readonly');
+    const store = transaction.objectStore('videos');
+    const request = store.getAll();
 
-  request.onsuccess = (e) => {
-    recordedVideos.forEach(item => {
-      if (item.url) URL.revokeObjectURL(item.url);
-    });
+    request.onsuccess = (e) => {
+      const records = e.target.result || [];
+      if (records.length > 0) {
+        // Limpiar URLs previas
+        recordedVideos.forEach(item => {
+          if (item.url) URL.revokeObjectURL(item.url);
+        });
 
-    const records = e.target.result || [];
-    recordedVideos = records.map(rec => ({
-      id: rec.id,
-      blob: rec.blob,
-      url: URL.createObjectURL(rec.blob),
-      date: rec.date
-    }));
+        recordedVideos = records.map(rec => {
+          const blob = rec.blob || new Blob([rec.buffer], { type: rec.type || 'video/mp4' });
+          return {
+            id: rec.id,
+            blob: blob,
+            url: URL.createObjectURL(blob),
+            date: rec.date
+          };
+        }).reverse();
 
-    renderGallery();
-  };
+        renderGallery();
+      }
+    };
+  } catch (err) {
+    console.error("Error al cargar videos desde DB:", err);
+  }
 }
 
 function deleteVideoFromDB(id) {
-  if (!db) {
-    recordedVideos = recordedVideos.filter(v => v.id !== id);
-    renderGallery();
-    return;
+  recordedVideos = recordedVideos.filter(v => v.id !== id);
+  renderGallery();
+
+  if (db) {
+    try {
+      const transaction = db.transaction(['videos'], 'readwrite');
+      const store = transaction.objectStore('videos');
+      store.delete(id);
+    } catch (err) {
+      console.error("Error borrando de DB:", err);
+    }
   }
-  const transaction = db.transaction(['videos'], 'readwrite');
-  const store = transaction.objectStore('videos');
-  store.delete(id);
-  transaction.oncomplete = () => loadVideosFromDB();
 }
 
 // Navegación
@@ -121,7 +147,7 @@ function showSection(sectionToShow, activeBtn) {
   }
 }
 
-// Control de cámara
+// Cámara
 async function startCamera() {
   stopCamera();
   
@@ -149,8 +175,8 @@ async function startCamera() {
       }
     }
   } catch (err) {
-    console.error("Error al acceder a la cámara o micrófono:", err);
-    alert("No se pudo acceder a la cámara o al micrófono. Asegúrate de otorgar los permisos necesarios.");
+    console.error("Error accediendo a cámara:", err);
+    alert("Para poder grabar, autoriza los permisos de cámara y micrófono en tu navegador.");
   }
 }
 
@@ -161,7 +187,7 @@ function stopCamera() {
   }
 }
 
-// Teleprompter
+// Prompter
 function togglePrompter() {
   if (isPrompterRunning) {
     stopPrompter();
@@ -192,45 +218,43 @@ function stopPrompter() {
   }
 }
 
-// Obtener formato compatible según navegador (iOS / Android / Desktop)
-function getBestSupportedMimeType() {
+// Selector de tipo MIME compatible
+function getSupportedMimeType() {
   if (typeof MediaRecorder === 'undefined') return '';
 
   const types = [
-    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4;codecs=avc1',
     'video/mp4',
     'video/webm;codecs=vp8,opus',
-    'video/webm;codecs=vp9,opus',
     'video/webm'
   ];
 
   for (let type of types) {
-    if (MediaRecorder.isTypeSupported(type)) {
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type)) {
       return type;
     }
   }
   return '';
 }
 
-// Grabación de Video
+// Grabación
 function startRecording() {
   if (!currentStream) {
-    alert("No hay señal de cámara disponible para grabar.");
+    alert("Inicia la cámara antes de comenzar a grabar.");
     return;
   }
-  
+
   recordedChunks = [];
-  const mimeType = getBestSupportedMimeType();
+  const mimeType = getSupportedMimeType();
   const options = mimeType ? { mimeType } : {};
 
   try {
     mediaRecorder = new MediaRecorder(currentStream, options);
   } catch (e) {
     try {
-      // Fallback sin opciones
       mediaRecorder = new MediaRecorder(currentStream);
     } catch (err) {
-      alert("Tu dispositivo no admite la grabación de video en este navegador.");
+      alert("Tu navegador no soporta el formato de grabación.");
       return;
     }
   }
@@ -243,7 +267,7 @@ function startRecording() {
 
   mediaRecorder.onstop = () => {
     if (recordedChunks.length === 0) {
-      alert("No se capturó ningún dato de video durante la grabación.");
+      alert("No se capturaron datos de video. Intenta de nuevo.");
       return;
     }
 
@@ -256,8 +280,8 @@ function startRecording() {
     saveVideoToDB(blob, dateStr);
   };
 
-  // Solicitar fragmentos cada 500ms para asegurar captura
-  mediaRecorder.start(500); 
+  // Solicitar fragmentos continuos
+  mediaRecorder.start(1000); 
 
   if (btnRecord) btnRecord.style.display = 'none';
   if (btnStopRec) btnStopRec.style.display = 'flex';
@@ -349,7 +373,7 @@ window.deleteVideo = function(id) {
   deleteVideoFromDB(id);
 };
 
-// Eventos al cargar el DOM
+// Asignación de Eventos
 document.addEventListener('DOMContentLoaded', () => {
   navHome = document.getElementById('navHome');
   navEditor = document.getElementById('navEditor');
