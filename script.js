@@ -18,7 +18,7 @@ let speedInput, fontSizeInput, btnMirror;
 let btnReset, btnPlay, btnRecord, btnStopRec, btnSwitchCam, btnZoom;
 let videoModal, modalVideoPlayer, btnCloseModal;
 
-// Inicialización de DB
+// Inicialización de DB (IndexedDB)
 function initDB() {
   const request = indexedDB.open('TeleprompterDB', 1);
 
@@ -40,13 +40,26 @@ function initDB() {
 }
 
 function saveVideoToDB(blob, dateString) {
-  if (!db) return;
+  if (!db) {
+    // Si falla IndexedDB, guardar temporalmente en memoria para no perder la grabación
+    const fallbackItem = {
+      id: Date.now(),
+      blob: blob,
+      url: URL.createObjectURL(blob),
+      date: dateString
+    };
+    recordedVideos.push(fallbackItem);
+    renderGallery();
+    return;
+  }
+
   const transaction = db.transaction(['videos'], 'readwrite');
   const store = transaction.objectStore('videos');
   const videoRecord = { blob: blob, date: dateString };
   
   const request = store.add(videoRecord);
   request.onsuccess = () => loadVideosFromDB();
+  request.onerror = (e) => console.error("Error guardando el video en DB:", e);
 }
 
 function loadVideosFromDB() {
@@ -73,7 +86,11 @@ function loadVideosFromDB() {
 }
 
 function deleteVideoFromDB(id) {
-  if (!db) return;
+  if (!db) {
+    recordedVideos = recordedVideos.filter(v => v.id !== id);
+    renderGallery();
+    return;
+  }
   const transaction = db.transaction(['videos'], 'readwrite');
   const store = transaction.objectStore('videos');
   store.delete(id);
@@ -132,7 +149,8 @@ async function startCamera() {
       }
     }
   } catch (err) {
-    console.error("Error al acceder a la cámara:", err);
+    console.error("Error al acceder a la cámara o micrófono:", err);
+    alert("No se pudo acceder a la cámara o al micrófono. Asegúrate de otorgar los permisos necesarios.");
   }
 }
 
@@ -174,35 +192,45 @@ function stopPrompter() {
   }
 }
 
-// Grabación
-function getSupportedMimeType() {
+// Obtener formato compatible según navegador (iOS / Android / Desktop)
+function getBestSupportedMimeType() {
+  if (typeof MediaRecorder === 'undefined') return '';
+
   const types = [
-    'video/mp4;codecs=avc1',
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
     'video/mp4',
     'video/webm;codecs=vp8,opus',
+    'video/webm;codecs=vp9,opus',
     'video/webm'
   ];
+
   for (let type of types) {
-    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) {
+    if (MediaRecorder.isTypeSupported(type)) {
       return type;
     }
   }
   return '';
 }
 
+// Grabación de Video
 function startRecording() {
-  if (!currentStream) return;
+  if (!currentStream) {
+    alert("No hay señal de cámara disponible para grabar.");
+    return;
+  }
   
   recordedChunks = [];
-  const mimeType = getSupportedMimeType();
+  const mimeType = getBestSupportedMimeType();
+  const options = mimeType ? { mimeType } : {};
 
   try {
-    mediaRecorder = mimeType ? new MediaRecorder(currentStream, { mimeType }) : new MediaRecorder(currentStream);
+    mediaRecorder = new MediaRecorder(currentStream, options);
   } catch (e) {
     try {
+      // Fallback sin opciones
       mediaRecorder = new MediaRecorder(currentStream);
     } catch (err) {
-      alert("Tu dispositivo no soporta la grabación en este navegador.");
+      alert("Tu dispositivo no admite la grabación de video en este navegador.");
       return;
     }
   }
@@ -214,18 +242,26 @@ function startRecording() {
   };
 
   mediaRecorder.onstop = () => {
-    if (recordedChunks.length === 0) return;
+    if (recordedChunks.length === 0) {
+      alert("No se capturó ningún dato de video durante la grabación.");
+      return;
+    }
+
     const finalMime = mediaRecorder.mimeType || 'video/mp4';
     const blob = new Blob(recordedChunks, { type: finalMime });
+    
     const now = new Date();
     const dateStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' - ' + now.toLocaleDateString();
     
     saveVideoToDB(blob, dateStr);
   };
 
-  mediaRecorder.start(250); 
+  // Solicitar fragmentos cada 500ms para asegurar captura
+  mediaRecorder.start(500); 
+
   if (btnRecord) btnRecord.style.display = 'none';
   if (btnStopRec) btnStopRec.style.display = 'flex';
+  
   startPrompter();
 }
 
@@ -235,10 +271,11 @@ function stopRecording() {
   }
   if (btnStopRec) btnStopRec.style.display = 'none';
   if (btnRecord) btnRecord.style.display = 'flex';
+  
   stopPrompter();
 }
 
-// Galería y Modal
+// Galería y Modales
 function renderGallery() {
   const galleryGrid = document.getElementById('galleryGrid');
   const videoCount = document.getElementById('videoCount');
@@ -298,10 +335,11 @@ window.downloadVideo = function(index) {
   const item = recordedVideos[index];
   if (!item) return;
 
+  const ext = item.blob.type.includes('webm') ? 'webm' : 'mp4';
   const a = document.createElement('a');
   a.style.display = 'none';
   a.href = item.url;
-  a.download = `grabacion_${index + 1}.mp4`;
+  a.download = `grabacion_${index + 1}.${ext}`;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => document.body.removeChild(a), 100);
@@ -311,9 +349,8 @@ window.deleteVideo = function(id) {
   deleteVideoFromDB(id);
 };
 
-// VINCULACIÓN DE EVENTOS AL CARGAR EL DOM
+// Eventos al cargar el DOM
 document.addEventListener('DOMContentLoaded', () => {
-  // Inicialización de DOM
   navHome = document.getElementById('navHome');
   navEditor = document.getElementById('navEditor');
   navPrompter = document.getElementById('navPrompter');
@@ -349,7 +386,6 @@ document.addEventListener('DOMContentLoaded', () => {
   modalVideoPlayer = document.getElementById('modalVideoPlayer');
   btnCloseModal = document.getElementById('btnCloseModal');
 
-  // Asignar Eventos
   if (navHome) navHome.addEventListener('click', () => showSection(sectionHome, null));
   if (navEditor) navEditor.addEventListener('click', () => showSection(sectionEditor, navEditor));
   if (navPrompter) navPrompter.addEventListener('click', () => showSection(sectionPrompter, navPrompter));
@@ -416,6 +452,5 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Inicializar DB
   initDB();
 });
